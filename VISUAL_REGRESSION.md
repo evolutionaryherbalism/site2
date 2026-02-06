@@ -80,17 +80,24 @@ On test failure, POST to `WEBHOOK_URL`:
 
 ## Baseline Management
 
-- **Storage**: `tests/visual-regression.spec.js-snapshots/`
+- **Storage**: GitHub Actions Cache (not in git)
+- **Cache key**: `visual-baselines-v1`
 - **Update**: Run "Update Visual Baselines" workflow
-- **Delete**: Remove snapshot files, re-run update workflow
+- **Clear**:
+  - Settings → Actions → Caches → Delete `visual-baselines-v1`
+  - Or increment version in workflows: `v1` → `v2`
+- **Retention**: 7 days if unused, up to 10GB total
 
 ## File Structure
 
 ```
 tests/
   visual-regression.spec.js           # Test implementation
-  visual-regression.spec.js-snapshots/ # Baseline screenshots
+  visual-regression.spec.js-snapshots/ # Baseline screenshots (cached, not in git)
     chromium/
       sitename.png
 urls.yml                              # Local URL configuration
+.github/workflows/
+  visual-regression.yml               # Test workflow
+  update-baselines.yml                # Baseline update workflow
 ```

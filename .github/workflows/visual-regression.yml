@@ -25,8 +25,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Restore baseline snapshots
+        uses: actions/cache/restore@v4
+        with:
+          path: tests/visual-regression.spec.js-snapshots
+          key: visual-baselines-v1
+          restore-keys: visual-baselines-
 
       - name: Run visual regression tests
         env:
