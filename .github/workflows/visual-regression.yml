@@ -2,14 +2,12 @@ name: Visual Regression Tests
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Run every hour
-    - cron: '*/05 * * * *'  # Run every 5 minutes
-  workflow_dispatch:  # Allow manual trigger
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  pull-requests: write
 
 jobs:
   visual-regression:
@@ -22,6 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -30,31 +29,74 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
+        env:
+          URLS_CONFIG: ${{ vars.URLS_CONFIG }}
         run: npm test
+        continue-on-error: true
+        id: test
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: visual-regression-results
+          name: playwright-report-${{ github.run_id }}
           path: |
-            test-results/
             playwright-report/
+            test-results/
           retention-days: 30
 
-      - name: Upload baseline screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: baseline-screenshots
-          path: screenshots/
-          retention-days: 30
-
-      - name: Commit updated baselines
-        if: github.event_name == 'workflow_dispatch'
+      - name: Send webhook notification on failure
+        if: steps.test.outcome == 'failure'
+        env:
+          URLS_CONFIG: ${{ vars.URLS_CONFIG }}
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add screenshots/
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update visual regression baselines"
-          git push
+          if [ -f test-results/results.json ]; then
+            node << 'SCRIPT'
+              const fs = require('fs');
+              const yaml = require('js-yaml');
+
+              const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
+              const webhook = process.env.WEBHOOK_URL;
+              const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+              // Load config to get URLs
+              const config = process.env.URLS_CONFIG
+                ? yaml.load(process.env.URLS_CONFIG)
+                : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
+
+              const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
+
+              // Send webhook for each failed test
+              results.suites.forEach(suite => {
+                suite.specs.forEach(spec => {
+                  spec.tests.forEach(test => {
+                    test.results.forEach(result => {
+                      if (result.status === 'failed') {
+                        const match = spec.title.match(/^(.+?) \((.+?)\)$/);
+                        const name = match ? match[1] : spec.title;
+                        const url = sitesMap.get(name) || 'unknown';
+
+                        const payload = {
+                          status: 'failed',
+                          name: name,
+                          url: url,
+                          report_url: reportUrl
+                        };
+
+                        fetch(webhook, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(payload)
+                        }).catch(err => console.error('Webhook failed:', err));
+                      }
+                    });
+                  });
+                });
+              });
+            SCRIPT
+          fi
+
+      - name: Fail job if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1

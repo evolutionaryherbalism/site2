@@ -3,88 +3,108 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 
-// Load URL configuration
-const configPath = path.join(__dirname, '..', 'urls.yml');
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'));
+// Load URL configuration from env var (CI) or file (local)
+function loadConfig() {
+  if (process.env.URLS_CONFIG) {
+    return yaml.load(process.env.URLS_CONFIG);
+  }
+  const configPath = path.join(__dirname, '..', 'urls.yml');
+  return yaml.load(fs.readFileSync(configPath, 'utf8'));
+}
 
-// Determine which URLs to test based on schedule
-function getUrlsForCurrentRun() {
-  const allUrls = [];
+// Parse period string (15m, 2h, 3d) to minutes
+function periodToMinutes(period) {
+  const match = period.match(/^(\d+)(m|h|d)$/);
+  if (!match) throw new Error(`Invalid period format: ${period}`);
+
+  const [, value, unit] = match;
+  const num = parseInt(value, 10);
+
+  switch (unit) {
+    case 'm': return num;
+    case 'h': return num * 60;
+    case 'd': return num * 60 * 24;
+    default: throw new Error(`Invalid period unit: ${unit}`);
+  }
+}
+
+// Check if current time matches period
+function shouldRunNow(period) {
+  const minutes = periodToMinutes(period);
   const now = new Date();
-  const minutes = now.getMinutes();
-  
-  // 30m period sites run every 30 minutes
-  if (config.period['30m']) {
-    allUrls.push(...config.period['30m'].map(site => ({ ...site, period: '30m' })));
-  }
-  
-  // 1h period sites run only on the hour
-  if (minutes === 0 && config.period['1h']) {
-    allUrls.push(...config.period['1h'].map(site => ({ ...site, period: '1h' })));
-  }
-  
-  // For manual runs or testing, run all sites
+  const minutesSinceEpoch = Math.floor(now.getTime() / 60000);
+  return minutesSinceEpoch % minutes === 0;
+}
+
+// Determine which URLs to test
+function getUrlsForCurrentRun() {
+  const config = loadConfig();
+
+  // Manual runs or local: test all sites
   if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || !process.env.CI) {
-    const all = [];
-    for (const period in config.period) {
-      all.push(...config.period[period].map(site => ({ ...site, period })));
-    }
-    return all;
+    return config.sites;
   }
-  
-  return allUrls;
+
+  // Scheduled runs: filter by period
+  return config.sites.filter(site => shouldRunNow(site.period));
 }
 
 const urlsToTest = getUrlsForCurrentRun();
 
 // Create a test for each URL
 for (const site of urlsToTest) {
-  test(`Visual regression: ${site.name} (${site.period})`, async ({ page }) => {
-    const screenshotDir = path.join(__dirname, '..', 'screenshots', site.period);
-    const baselinePath = path.join(screenshotDir, `${site.name}-baseline.png`);
-    const currentPath = path.join(screenshotDir, `${site.name}-current.png`);
-    
-    // Ensure directory exists
-    fs.mkdirSync(screenshotDir, { recursive: true });
-    
+  test(`${site.name} (${site.period})`, async ({ page }, testInfo) => {
     // Navigate to the page
-    await page.goto(site.url, { waitUntil: 'networkidle', timeout: 30000 });
-    
-    // Hide dynamic elements if specified
+    await page.goto(site.url, { waitUntil: 'networkidle' });
+
+    // Hide elements with visibility:hidden (keeps layout space)
     if (site.excludeSelectors && site.excludeSelectors.length > 0) {
       for (const selector of site.excludeSelectors) {
         try {
-          await page.locator(selector).evaluateAll(elements => 
+          await page.locator(selector).evaluateAll(elements =>
             elements.forEach(el => el.style.visibility = 'hidden')
           );
         } catch (e) {
-          // Selector might not exist on the page, continue
-          console.log(`Selector ${selector} not found on ${site.name}`);
+          console.log(`excludeSelector ${selector} not found on ${site.name}`);
         }
       }
     }
-    
-    // Take screenshot
-    await page.screenshot({ path: currentPath, fullPage: true });
-    
-    // If baseline doesn't exist, create it
-    if (!fs.existsSync(baselinePath)) {
-      fs.copyFileSync(currentPath, baselinePath);
-      console.log(`Created baseline for ${site.name}`);
-      return; // Skip comparison on first run
+
+    // Hide elements with display:none (removes from layout)
+    if (site.hideSelectors && site.hideSelectors.length > 0) {
+      for (const selector of site.hideSelectors) {
+        try {
+          await page.locator(selector).evaluateAll(elements =>
+            elements.forEach(el => el.style.display = 'none')
+          );
+        } catch (e) {
+          console.log(`hideSelector ${selector} not found on ${site.name}`);
+        }
+      }
     }
-    
-    // Compare with baseline
-    const baseline = fs.readFileSync(baselinePath);
-    const current = fs.readFileSync(currentPath);
-    
-    // Use Playwright's built-in visual comparison
-    expect(await page.screenshot({ fullPage: true })).toMatchSnapshot(`${site.name}-baseline.png`, {
-      maxDiffPixels: 100, // Allow small differences
-      threshold: 0.2
+
+    // Check if baseline exists
+    const snapshotPath = testInfo.snapshotPath(`${site.name}.png`);
+    const baselineExists = fs.existsSync(snapshotPath);
+
+    if (!baselineExists) {
+      // No baseline: take screenshot and skip comparison
+      const dir = path.dirname(snapshotPath);
+      fs.mkdirSync(dir, { recursive: true });
+      await page.screenshot({
+        path: snapshotPath,
+        fullPage: true
+      });
+      console.log(`Created baseline for ${site.name} at ${snapshotPath}`);
+      return;
+    }
+
+    // Visual comparison using Playwright's built-in snapshot
+    await expect(page).toHaveScreenshot(`${site.name}.png`, {
+      fullPage: true,
+      maxDiffPixels: 100,
+      threshold: 0.2,
+      timeout: 10000,
     });
-    
-    // Update current as new baseline for next run
-    fs.copyFileSync(currentPath, baselinePath);
   });
 }

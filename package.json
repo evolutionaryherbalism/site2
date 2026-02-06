@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Visual regression testing for monitored URLs",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "clean": "rm -rf tests/visual-regression.spec.js-snapshots test-results playwright-report"
   },
   "keywords": [],
   "author": "",

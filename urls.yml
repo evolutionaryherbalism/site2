@@ -1,18 +1,19 @@
-period:
-  15m:
-    - url: https://www.wordfence.com/threat-intel/
-      name: wordfence
-      excludeSelectors:
-        - '.dynamic-content'
-        - '#timestamp'
-    - url: https://news.ycombinator.com/
-      name: hackernews
-      excludeSelectors:
-        - '.score'
-        - '.age'
-  30m:
-    - url: https://www.wikipedia.com/
-      name: wikipedia
-      excludeSelectors:
-        - '#mp-otd'
-        - '.today-featured'
+sites:
+  - url: https://www.wordfence.com/threat-intel/
+    name: wordfence
+    period: 15m
+    hideSelectors:
+      - '.wf-cookie-consent-external'
+    excludeSelectors:
+      - '#timestamp'
+  - url: https://news.ycombinator.com/
+    name: hackernews
+    period: 15m
+    excludeSelectors:
+      - '.score'
+      - '.age'
+  - url: https://www.wikipedia.com/
+    name: wikipedia
+    period: 30m
+    excludeSelectors:
+      - '.wikipedia25-video'

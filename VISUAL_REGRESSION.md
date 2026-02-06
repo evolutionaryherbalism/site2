@@ -1,63 +1,96 @@
 # Visual Regression Testing
 
-This repository includes automated visual regression testing using Playwright.
+Automated visual regression monitoring using Playwright and GitHub Actions.
 
-## Overview
+## How It Works
 
-The visual regression system monitors specified URLs for visual changes by:
-1. Taking screenshots periodically
-2. Comparing with baseline images
-3. Reporting differences via GitHub Actions
+1. **Schedule**: Runs every 15 minutes via GitHub Actions
+2. **Period Matching**: Tests only URLs whose period matches current time
+3. **Comparison**: Compares screenshots against static baselines
+4. **Notification**: Sends webhook on visual differences
+5. **Baselines**: Updated only via manual workflow trigger
 
 ## Configuration
 
-URLs are configured in `urls.yml`:
+### Local Development
+Edit `urls.yml`:
 
 ```yaml
-period:
-  1h:
-    - url: https://example.com/
-      name: example-homepage
-      excludeSelectors:
-        - '.dynamic-content'
-  30m:
-    - url: https://another-site.com/
-      name: another-site
-      excludeSelectors:
-        - '#timestamp'
+sites:
+  - url: https://example.com/
+    name: example
+    period: 15m
+    excludeSelectors:
+      - '.dynamic-content'
+      - '#timestamp'
+    hideSelectors:
+      - '.cookie-banner'
+      - '#consent-popup'
 ```
 
-### Configuration Options
+### Production (GitHub Actions)
+Set repository variables:
+- `URLS_CONFIG`: YAML string (same format as urls.yml)
+- `WEBHOOK_URL`: Endpoint for failure notifications
 
-- **period**: Time interval (e.g., `1h`, `30m`)
+## Period Format
+
+- `15m` - Every 15 minutes
+- `30m` - Every 30 minutes
+- `1h` - Every hour
+- `2h` - Every 2 hours
+- `3d` - Every 3 days
+
+Period must be multiple of 15 minutes.
+
+## Configuration Options
+
 - **url**: Full URL to monitor
-- **name**: Unique identifier for the site
-- **excludeSelectors**: CSS selectors for dynamic elements to hide before comparison
+- **name**: Unique identifier (alphanumeric, hyphens)
+- **period**: Test frequency (15m, 30m, 1h, 2h, 3d, etc.)
+- **excludeSelectors**: CSS selectors to hide with `visibility: hidden` (keeps layout space)
+- **hideSelectors**: CSS selectors to hide with `display: none` (removes from layout, use for cookie banners)
 
 ## Running Tests
 
-### Locally
-
+### Local
 ```bash
 npm install
-npm test
+npm test                    # Test all sites
+npm test -- --update-snapshots  # Update baselines
 ```
 
-### Via GitHub Actions
+### GitHub Actions
+- **Automatic**: Every 15 minutes (schedule)
+- **Manual Test**: Actions → Visual Regression Tests → Run workflow
+- **Update Baselines**: Actions → Update Visual Baselines → Run workflow
 
-Tests run automatically:
-- Every 30 minutes for `30m` period sites
-- Every hour for `1h` period sites
-- Manual trigger via workflow_dispatch
+## Webhook Payload
 
-## Updating Baselines
+On test failure, POST to `WEBHOOK_URL`:
 
-To update baseline screenshots:
-1. Run workflow manually via GitHub Actions UI
-2. Baselines are automatically committed when run manually
+```json
+{
+  "status": "failed",
+  "name": "site-name",
+  "url": "https://example.com",
+  "report_url": "https://github.com/org/repo/actions/runs/123"
+}
+```
 
-## Artifacts
+## Baseline Management
 
-GitHub Actions uploads:
-- Test results and reports (30 days retention)
-- Baseline screenshots (30 days retention)
+- **Storage**: `tests/visual-regression.spec.js-snapshots/`
+- **Update**: Run "Update Visual Baselines" workflow
+- **Delete**: Remove snapshot files, re-run update workflow
+
+## File Structure
+
+```
+tests/
+  visual-regression.spec.js           # Test implementation
+  visual-regression.spec.js-snapshots/ # Baseline screenshots
+    chromium/
+      sitename.png
+urls.yml                              # Local URL configuration
+```
