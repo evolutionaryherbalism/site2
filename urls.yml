@@ -1,7 +1,7 @@
 period:
-  1h:
-    - url: https://artbot.site/
-      name: artbot-homepage
+  15m:
+    - url: https://www.wordfence.com/threat-intel/
+      name: wordfence
       excludeSelectors:
         - '.dynamic-content'
         - '#timestamp'
