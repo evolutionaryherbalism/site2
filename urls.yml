@@ -1,0 +1,18 @@
+period:
+  1h:
+    - url: https://artbot.site/
+      name: artbot-homepage
+      excludeSelectors:
+        - '.dynamic-content'
+        - '#timestamp'
+    - url: https://news.ycombinator.com/
+      name: hackernews
+      excludeSelectors:
+        - '.score'
+        - '.age'
+  30m:
+    - url: https://www.wikipedia.com/
+      name: wikipedia
+      excludeSelectors:
+        - '#mp-otd'
+        - '.today-featured'
