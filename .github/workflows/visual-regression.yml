@@ -3,7 +3,7 @@ name: Visual Regression Tests
 on:
   schedule:
     - cron: '0 * * * *'  # Run every hour
-    - cron: '*/05 * * * *'  # Run every 30 minutes
+    - cron: '*/05 * * * *'  # Run every 5 minutes
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
