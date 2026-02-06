@@ -12,6 +12,27 @@ function loadConfig() {
   return yaml.load(fs.readFileSync(configPath, 'utf8'));
 }
 
+// Wait for page height to stabilize
+async function waitForStableHeight(page, timeout = 5000) {
+  const startTime = Date.now();
+  let previousHeight = 0;
+  let stableCount = 0;
+
+  while (Date.now() - startTime < timeout) {
+    const currentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+
+    if (currentHeight === previousHeight) {
+      stableCount++;
+      if (stableCount >= 3) return; // Stable for 3 consecutive checks
+    } else {
+      stableCount = 0;
+    }
+
+    previousHeight = currentHeight;
+    await page.waitForTimeout(200);
+  }
+}
+
 // Parse period string (15m, 2h, 3d) to minutes
 function periodToMinutes(period) {
   const match = period.match(/^(\d+)(m|h|d)$/);
@@ -82,6 +103,9 @@ for (const site of urlsToTest) {
         }
       }
     }
+
+    // Wait for page height to stabilize (handles lazy loading, animations)
+    await waitForStableHeight(page);
 
     // Check if baseline exists
     const snapshotPath = testInfo.snapshotPath(`${site.name}.png`);
