@@ -76,7 +76,7 @@ const urlsToTest = getUrlsForCurrentRun();
 for (const site of urlsToTest) {
   test(`${site.name} (${site.period})`, async ({ page }, testInfo) => {
     // Navigate to the page
-    await page.goto(site.url, { waitUntil: 'networkidle' });
+    await page.goto(site.url, { waitUntil: 'load' });
 
     // Hide elements with visibility:hidden (keeps layout space)
     if (site.excludeSelectors && site.excludeSelectors.length > 0) {
