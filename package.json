@@ -1,0 +1,15 @@
+{
+  "name": "visual-regression-tests",
+  "version": "1.0.0",
+  "description": "Visual regression testing for monitored URLs",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "js-yaml": "^4.1.0"
+  }
+}
