@@ -2,7 +2,7 @@ name: Visual Regression Tests
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
+    - cron: '10/15 * * * *'  # Every 15 minutes
   workflow_dispatch:
 
 permissions:
