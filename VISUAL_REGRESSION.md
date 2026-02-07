@@ -31,7 +31,8 @@ sites:
 ### Production (GitHub Actions)
 Set repository variables:
 - `URLS_CONFIG`: YAML string (same format as urls.yml)
-- `WEBHOOK_URL`: Endpoint for failure notifications
+- `WEBHOOK_URL`: Endpoint for failure notifications (optional)
+- `WEBHOOK_URL_ALWAYS`: Endpoint for all test results, success or failure (optional)
 
 ## Period Format
 
@@ -67,11 +68,20 @@ npm test -- --update-snapshots  # Update baselines
 
 ## Webhook Payload
 
-On test failure, POST to `WEBHOOK_URL`:
-
+**WEBHOOK_URL** (failures only):
 ```json
 {
   "status": "failed",
+  "name": "site-name",
+  "url": "https://example.com",
+  "report_url": "https://github.com/org/repo/actions/runs/123"
+}
+```
+
+**WEBHOOK_URL_ALWAYS** (all results):
+```json
+{
+  "status": "success",  // or "failed"
   "name": "site-name",
   "url": "https://example.com",
   "report_url": "https://github.com/org/repo/actions/runs/123"

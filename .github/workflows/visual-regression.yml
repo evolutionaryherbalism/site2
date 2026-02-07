@@ -111,6 +111,57 @@ jobs:
           EOF
           node notify.js
 
+      - name: Send always webhook notification
+        if: always() && vars.WEBHOOK_URL_ALWAYS != ''
+        env:
+          URLS_CONFIG: ${{ vars.URLS_CONFIG }}
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL_ALWAYS }}
+          TEST_STATUS: ${{ steps.test.outcome }}
+        run: |
+          cat > notify-always.js << 'EOF'
+          const fs = require('fs');
+          const yaml = require('js-yaml');
+
+          if (!fs.existsSync('test-results/results.json')) process.exit(0);
+
+          const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
+          const webhook = process.env.WEBHOOK_URL;
+          const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          const testStatus = process.env.TEST_STATUS;
+
+          const config = process.env.URLS_CONFIG
+            ? yaml.load(process.env.URLS_CONFIG)
+            : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
+
+          const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
+
+          results.suites.forEach(suite => {
+            suite.specs.forEach(spec => {
+              spec.tests.forEach(test => {
+                test.results.forEach(result => {
+                  const match = spec.title.match(/^(.+?) \((.+?)\)$/);
+                  const name = match ? match[1] : spec.title;
+                  const url = sitesMap.get(name) || 'unknown';
+
+                  const payload = {
+                    status: result.status === 'passed' ? 'success' : 'failed',
+                    name: name,
+                    url: url,
+                    report_url: reportUrl
+                  };
+
+                  fetch(webhook, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                  }).catch(err => console.error('Webhook failed:', err));
+                });
+              });
+            });
+          });
+          EOF
+          node notify-always.js
+
       - name: Fail job if tests failed
         if: steps.test.outcome == 'failure'
         run: exit 1
