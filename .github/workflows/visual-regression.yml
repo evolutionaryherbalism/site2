@@ -106,13 +106,24 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           # Find all screenshots (current, diff, actual)
+          TIMESTAMP=$(date +%s)
           find test-results -name "*-current.png" -o -name "*-diff.png" -o -name "*-actual.png" | while read file; do
-            # Generate unique path
             filename=$(basename "$file")
-            testname=$(echo "$file" | sed 's|test-results/||' | sed 's|/.*||')
-            s3_path="${RUN_ID}/${testname}/${filename}"
 
-            # Upload to R2
+            # Extract site name from filename (e.g., "elh-1-current.png" -> "elh-1")
+            sitename=$(echo "$filename" | sed 's/-current\.png$//' | sed 's/-diff\.png$//' | sed 's/-actual\.png$//')
+
+            # Determine file type and construct new filename with timestamp
+            if [[ "$filename" == *"-current.png" ]]; then
+              newfilename="${sitename}-${TIMESTAMP}.png"
+            elif [[ "$filename" == *"-diff.png" ]]; then
+              newfilename="${sitename}-diff-${TIMESTAMP}.png"
+            elif [[ "$filename" == *"-actual.png" ]]; then
+              newfilename="${sitename}-actual-${TIMESTAMP}.png"
+            fi
+
+            # Upload with clean path: run_id/site-name/site-name-timestamp.png
+            s3_path="${RUN_ID}/${sitename}/${newfilename}"
             aws s3 cp "$file" "s3://${BUCKET}/${s3_path}" --endpoint-url "$AWS_ENDPOINT_URL"
 
             echo "Uploaded: ${s3_path}"
@@ -151,20 +162,24 @@ jobs:
             if (!r2PublicUrl) return null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
+              const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                // Extract timestamp from filename
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
               }
-              const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
+              const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
               if (actualPath) {
                 const filename = path.basename(actualPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
               }
-              const currentPath = execSync(`find test-results -type f -path "*${testName}*/*-current.png" | head -1`).toString().trim();
+              const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
               if (currentPath) {
                 const filename = path.basename(currentPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
               }
             } catch (e) {}
             return null;
@@ -235,20 +250,23 @@ jobs:
             if (!r2PublicUrl) return null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
+              const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
               }
-              const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
+              const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
               if (actualPath) {
                 const filename = path.basename(actualPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
               }
-              const currentPath = execSync(`find test-results -type f -path "*${testName}*/*-current.png" | head -1`).toString().trim();
+              const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
               if (currentPath) {
                 const filename = path.basename(currentPath);
-                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                return `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
               }
             } catch (e) {}
             return null;
