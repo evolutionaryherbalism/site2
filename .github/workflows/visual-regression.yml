@@ -96,27 +96,73 @@ jobs:
             test-results/
           retention-days: 30
 
+      - name: Upload screenshots to R2
+        if: steps.test.outcome == 'failure' && vars.R2_BUCKET_NAME != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.R2_BUCKET_NAME }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # Find all diff screenshots
+          find test-results -name "*-diff.png" -o -name "*-actual.png" | while read file; do
+            # Generate unique path
+            filename=$(basename "$file")
+            testname=$(echo "$file" | sed 's|test-results/||' | sed 's|/.*||')
+            s3_path="${RUN_ID}/${testname}/${filename}"
+
+            # Upload to R2
+            aws s3 cp "$file" "s3://${BUCKET}/${s3_path}" --endpoint-url "$AWS_ENDPOINT_URL"
+
+            echo "Uploaded: ${s3_path}"
+          done
+
       - name: Send webhook notification on failure
         if: steps.test.outcome == 'failure' && vars.WEBHOOK_URL != ''
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
           WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat > notify.js << 'EOF'
           const fs = require('fs');
           const yaml = require('js-yaml');
+          const path = require('path');
+          const { execSync } = require('child_process');
 
           if (!fs.existsSync('test-results/results.json')) process.exit(0);
 
           const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
           const webhook = process.env.WEBHOOK_URL;
           const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          const r2PublicUrl = process.env.R2_PUBLIC_URL;
+          const runId = process.env.RUN_ID;
 
           const config = process.env.URLS_CONFIG
             ? yaml.load(process.env.URLS_CONFIG)
             : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
 
           const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
+
+          // Find screenshot for a test
+          function findScreenshot(testName) {
+            if (!r2PublicUrl) return null;
+            try {
+              const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
+              if (diffPath) {
+                const filename = path.basename(diffPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+              const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
+              if (actualPath) {
+                const filename = path.basename(actualPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+            } catch (e) {}
+            return null;
+          }
 
           results.suites.forEach(suite => {
             suite.specs.forEach(spec => {
@@ -126,12 +172,14 @@ jobs:
                     const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                     const name = match ? match[1] : spec.title;
                     const url = sitesMap.get(name) || 'unknown';
+                    const screenshotUrl = findScreenshot(name);
 
                     const payload = {
                       status: 'failed',
                       name: name,
                       url: url,
-                      report_url: reportUrl
+                      report_url: reportUrl,
+                      screenshot_url: screenshotUrl
                     };
 
                     fetch(webhook, {
@@ -153,10 +201,14 @@ jobs:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
           WEBHOOK_URL: ${{ vars.WEBHOOK_URL_ALWAYS }}
           TEST_STATUS: ${{ steps.test.outcome }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat > notify-always.js << 'EOF'
           const fs = require('fs');
           const yaml = require('js-yaml');
+          const path = require('path');
+          const { execSync } = require('child_process');
 
           if (!fs.existsSync('test-results/results.json')) process.exit(0);
 
@@ -164,12 +216,31 @@ jobs:
           const webhook = process.env.WEBHOOK_URL;
           const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
           const testStatus = process.env.TEST_STATUS;
+          const r2PublicUrl = process.env.R2_PUBLIC_URL;
+          const runId = process.env.RUN_ID;
 
           const config = process.env.URLS_CONFIG
             ? yaml.load(process.env.URLS_CONFIG)
             : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
 
           const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
+
+          function findScreenshot(testName) {
+            if (!r2PublicUrl) return null;
+            try {
+              const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
+              if (diffPath) {
+                const filename = path.basename(diffPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+              const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
+              if (actualPath) {
+                const filename = path.basename(actualPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+            } catch (e) {}
+            return null;
+          }
 
           results.suites.forEach(suite => {
             suite.specs.forEach(spec => {
@@ -178,12 +249,14 @@ jobs:
                   const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                   const name = match ? match[1] : spec.title;
                   const url = sitesMap.get(name) || 'unknown';
+                  const screenshotUrl = result.status === 'failed' ? findScreenshot(name) : null;
 
                   const payload = {
                     status: result.status === 'passed' ? 'success' : 'failed',
                     name: name,
                     url: url,
-                    report_url: reportUrl
+                    report_url: reportUrl,
+                    screenshot_url: screenshotUrl
                   };
 
                   fetch(webhook, {
