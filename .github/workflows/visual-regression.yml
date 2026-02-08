@@ -12,6 +12,9 @@ permissions:
 jobs:
   visual-regression:
     runs-on: ubuntu-latest
+    env:
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      WEBHOOK_URL_ALWAYS: ${{ secrets.WEBHOOK_URL_ALWAYS }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,9 +44,7 @@ jobs:
           echo "baseline_exists=true" >> $GITHUB_OUTPUT
 
       - name: Notify baseline missing
-        if: steps.baseline-check.outputs.baseline_exists == 'false' && secrets.WEBHOOK_URL != ''
-        env:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        if: steps.baseline-check.outputs.baseline_exists == 'false' && env.WEBHOOK_URL != ''
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
@@ -130,10 +131,9 @@ jobs:
           done
 
       - name: Send webhook notification on failure
-        if: steps.test.outcome == 'failure' && secrets.WEBHOOK_URL != ''
+        if: steps.test.outcome == 'failure' && env.WEBHOOK_URL != ''
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -221,10 +221,9 @@ jobs:
           node notify.js
 
       - name: Send always webhook notification
-        if: always() && secrets.WEBHOOK_URL_ALWAYS != ''
+        if: always() && env.WEBHOOK_URL_ALWAYS != ''
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL_ALWAYS }}
           TEST_STATUS: ${{ steps.test.outcome }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           RUN_ID: ${{ github.run_id }}
@@ -238,7 +237,7 @@ jobs:
           if (!fs.existsSync('test-results/results.json')) process.exit(0);
 
           const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
-          const webhook = process.env.WEBHOOK_URL;
+          const webhook = process.env.WEBHOOK_URL_ALWAYS;
           const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
           const testStatus = process.env.TEST_STATUS;
           const r2PublicUrl = process.env.R2_PUBLIC_URL;

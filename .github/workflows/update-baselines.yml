@@ -10,6 +10,9 @@ permissions:
 jobs:
   update-baselines:
     runs-on: ubuntu-latest
+    env:
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      WEBHOOK_URL_ALWAYS: ${{ secrets.WEBHOOK_URL_ALWAYS }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -76,21 +79,18 @@ jobs:
           done
 
       - name: Notify failure
-        if: steps.update.outcome == 'failure' && secrets.WEBHOOK_URL != ''
-        env:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        if: steps.update.outcome == 'failure' && env.WEBHOOK_URL != ''
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"failed\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       - name: Notify always
-        if: always() && secrets.WEBHOOK_URL_ALWAYS != ''
+        if: always() && env.WEBHOOK_URL_ALWAYS != ''
         env:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL_ALWAYS }}
           STATUS: ${{ steps.update.outcome }}
         run: |
-          curl -X POST "$WEBHOOK_URL" \
+          curl -X POST "$WEBHOOK_URL_ALWAYS" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"$STATUS\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
