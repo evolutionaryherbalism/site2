@@ -41,9 +41,9 @@ jobs:
           echo "baseline_exists=true" >> $GITHUB_OUTPUT
 
       - name: Notify baseline missing
-        if: steps.baseline-check.outputs.baseline_exists == 'false' && vars.WEBHOOK_URL != ''
+        if: steps.baseline-check.outputs.baseline_exists == 'false' && secrets.WEBHOOK_URL != ''
         env:
-          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
@@ -130,10 +130,10 @@ jobs:
           done
 
       - name: Send webhook notification on failure
-        if: steps.test.outcome == 'failure' && vars.WEBHOOK_URL != ''
+        if: steps.test.outcome == 'failure' && secrets.WEBHOOK_URL != ''
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
-          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -162,24 +162,22 @@ jobs:
             if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
 
             let screenshotUrl = null;
+            let timestamp = null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
+              const diffPath = execSync(`find test-results -type f \\( -name "${testName}-diff.png" -o -name "${testName}-*-diff.png" \\) | head -1`).toString().trim();
               if (diffPath) {
-                const filename = path.basename(diffPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                timestamp = execSync('date +%s').toString().trim();
                 screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
               } else {
-                const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
+                const actualPath = execSync(`find test-results -type f \\( -name "${testName}-actual.png" -o -name "${testName}-*-actual.png" \\) | head -1`).toString().trim();
                 if (actualPath) {
-                  const filename = path.basename(actualPath);
-                  const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                  timestamp = execSync('date +%s').toString().trim();
                   screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
                 } else {
-                  const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
+                  const currentPath = execSync(`find test-results -type f \\( -name "${testName}-current.png" -o -name "${testName}-*-current.png" \\) | head -1`).toString().trim();
                   if (currentPath) {
-                    const filename = path.basename(currentPath);
-                    const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                    timestamp = execSync('date +%s').toString().trim();
                     screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
                   }
                 }
@@ -223,10 +221,10 @@ jobs:
           node notify.js
 
       - name: Send always webhook notification
-        if: always() && vars.WEBHOOK_URL_ALWAYS != ''
+        if: always() && secrets.WEBHOOK_URL_ALWAYS != ''
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
-          WEBHOOK_URL: ${{ vars.WEBHOOK_URL_ALWAYS }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL_ALWAYS }}
           TEST_STATUS: ${{ steps.test.outcome }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           RUN_ID: ${{ github.run_id }}
@@ -256,24 +254,22 @@ jobs:
             if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
 
             let screenshotUrl = null;
+            let timestamp = null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
+              const diffPath = execSync(`find test-results -type f \\( -name "${testName}-diff.png" -o -name "${testName}-*-diff.png" \\) | head -1`).toString().trim();
               if (diffPath) {
-                const filename = path.basename(diffPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                timestamp = execSync('date +%s').toString().trim();
                 screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
               } else {
-                const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
+                const actualPath = execSync(`find test-results -type f \\( -name "${testName}-actual.png" -o -name "${testName}-*-actual.png" \\) | head -1`).toString().trim();
                 if (actualPath) {
-                  const filename = path.basename(actualPath);
-                  const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                  timestamp = execSync('date +%s').toString().trim();
                   screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
                 } else {
-                  const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
+                  const currentPath = execSync(`find test-results -type f \\( -name "${testName}-current.png" -o -name "${testName}-*-current.png" \\) | head -1`).toString().trim();
                   if (currentPath) {
-                    const filename = path.basename(currentPath);
-                    const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                    timestamp = execSync('date +%s').toString().trim();
                     screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
                   }
                 }

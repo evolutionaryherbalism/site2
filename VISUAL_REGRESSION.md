@@ -31,13 +31,13 @@ sites:
 ### Production (GitHub Actions)
 Set repository variables:
 - `URLS_CONFIG`: YAML string (same format as urls.yml)
-- `WEBHOOK_URL`: Endpoint for failure notifications (optional)
-- `WEBHOOK_URL_ALWAYS`: Endpoint for all test results, success or failure (optional)
 - `R2_ACCOUNT_ID`: Cloudflare R2 account ID (optional, for screenshot uploads)
 - `R2_BUCKET_NAME`: R2 bucket name (optional)
 - `R2_PUBLIC_URL`: Public URL for R2 bucket (e.g., `https://screenshots.domain.com`)
 
 Set repository secrets:
+- `WEBHOOK_URL`: Endpoint for failure notifications (optional)
+- `WEBHOOK_URL_ALWAYS`: Endpoint for all test results, success or failure (optional)
 - `R2_ACCESS_KEY_ID`: R2 access key
 - `R2_SECRET_ACCESS_KEY`: R2 secret key
 

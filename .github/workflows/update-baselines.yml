@@ -76,18 +76,18 @@ jobs:
           done
 
       - name: Notify failure
-        if: steps.update.outcome == 'failure' && vars.WEBHOOK_URL != ''
+        if: steps.update.outcome == 'failure' && secrets.WEBHOOK_URL != ''
         env:
-          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"failed\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       - name: Notify always
-        if: always() && vars.WEBHOOK_URL_ALWAYS != ''
+        if: always() && secrets.WEBHOOK_URL_ALWAYS != ''
         env:
-          WEBHOOK_URL: ${{ vars.WEBHOOK_URL_ALWAYS }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL_ALWAYS }}
           STATUS: ${{ steps.update.outcome }}
         run: |
           curl -X POST "$WEBHOOK_URL" \
