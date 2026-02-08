@@ -16,6 +16,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore baseline snapshots
+        id: cache-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: tests/visual-regression.spec.js-snapshots
+          key: visual-baselines-v1
+          restore-keys: visual-baselines-
+
+      - name: Check baseline exists
+        run: |
+          if [ "${{ steps.cache-baseline.outputs.cache-hit }}" != "true" ]; then
+            echo "❌ No baseline cache found. Run 'Update Visual Baselines' workflow first."
+            exit 1
+          fi
+          if [ ! -d "tests/visual-regression.spec.js-snapshots" ] || [ -z "$(ls -A tests/visual-regression.spec.js-snapshots 2>/dev/null)" ]; then
+            echo "❌ Baseline cache is empty. Run 'Update Visual Baselines' workflow first."
+            exit 1
+          fi
+          echo "✅ Baseline cache restored successfully"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -35,13 +55,6 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-
-      - name: Restore baseline snapshots
-        uses: actions/cache/restore@v4
-        with:
-          path: tests/visual-regression.spec.js-snapshots
-          key: visual-baselines-v1
-          restore-keys: visual-baselines-
 
       - name: Run visual regression tests
         env:
