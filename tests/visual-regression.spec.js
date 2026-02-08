@@ -49,12 +49,16 @@ function periodToMinutes(period) {
   }
 }
 
-// Check if current time matches period
+// Check if current time matches period (within 15-minute window)
 function shouldRunNow(period) {
   const minutes = periodToMinutes(period);
   const now = new Date();
   const minutesSinceEpoch = Math.floor(now.getTime() / 60000);
-  return minutesSinceEpoch % minutes === 0;
+
+  // Check if we're within 15 minutes of when test should run
+  // This accounts for cron schedule not aligning perfectly
+  const remainder = minutesSinceEpoch % minutes;
+  return remainder < 15;
 }
 
 // Determine which URLs to test
