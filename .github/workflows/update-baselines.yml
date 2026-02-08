@@ -35,9 +35,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Update baseline screenshots
+        id: update
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
         run: npm test -- --update-snapshots
+        continue-on-error: true
 
       - name: Delete old baseline cache
         continue-on-error: true
@@ -46,7 +48,31 @@ jobs:
         run: gh cache delete visual-baselines-v1 --repo ${{ github.repository }}
 
       - name: Save baseline snapshots to cache
+        if: steps.update.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: tests/visual-regression.spec.js-snapshots
           key: visual-baselines-v1
+
+      - name: Notify failure
+        if: steps.update.outcome == 'failure' && vars.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+        run: |
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"failed\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+
+      - name: Notify always
+        if: always() && vars.WEBHOOK_URL_ALWAYS != ''
+        env:
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL_ALWAYS }}
+          STATUS: ${{ steps.update.outcome }}
+        run: |
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"$STATUS\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+
+      - name: Fail if update failed
+        if: steps.update.outcome == 'failure'
+        run: exit 1
