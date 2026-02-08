@@ -105,8 +105,8 @@ jobs:
           BUCKET: ${{ vars.R2_BUCKET_NAME }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          # Find all diff screenshots
-          find test-results -name "*-diff.png" -o -name "*-actual.png" | while read file; do
+          # Find all screenshots (current, diff, actual)
+          find test-results -name "*-current.png" -o -name "*-diff.png" -o -name "*-actual.png" | while read file; do
             # Generate unique path
             filename=$(basename "$file")
             testname=$(echo "$file" | sed 's|test-results/||' | sed 's|/.*||')
@@ -150,6 +150,7 @@ jobs:
           function findScreenshot(testName) {
             if (!r2PublicUrl) return null;
             try {
+              // Priority: diff (failed) > actual (failed) > current (always exists)
               const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
@@ -158,6 +159,11 @@ jobs:
               const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
               if (actualPath) {
                 const filename = path.basename(actualPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+              const currentPath = execSync(`find test-results -type f -path "*${testName}*/*-current.png" | head -1`).toString().trim();
+              if (currentPath) {
+                const filename = path.basename(currentPath);
                 return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
               }
             } catch (e) {}
@@ -228,6 +234,7 @@ jobs:
           function findScreenshot(testName) {
             if (!r2PublicUrl) return null;
             try {
+              // Priority: diff (failed) > actual (failed) > current (always exists)
               const diffPath = execSync(`find test-results -type f -path "*${testName}*/*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
@@ -236,6 +243,11 @@ jobs:
               const actualPath = execSync(`find test-results -type f -path "*${testName}*/*-actual.png" | head -1`).toString().trim();
               if (actualPath) {
                 const filename = path.basename(actualPath);
+                return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
+              }
+              const currentPath = execSync(`find test-results -type f -path "*${testName}*/*-current.png" | head -1`).toString().trim();
+              if (currentPath) {
+                const filename = path.basename(currentPath);
                 return `${r2PublicUrl}/${runId}/${testName}/${filename}`;
               }
             } catch (e) {}

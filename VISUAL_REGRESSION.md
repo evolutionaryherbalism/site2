@@ -33,6 +33,13 @@ Set repository variables:
 - `URLS_CONFIG`: YAML string (same format as urls.yml)
 - `WEBHOOK_URL`: Endpoint for failure notifications (optional)
 - `WEBHOOK_URL_ALWAYS`: Endpoint for all test results, success or failure (optional)
+- `R2_ACCOUNT_ID`: Cloudflare R2 account ID (optional, for screenshot uploads)
+- `R2_BUCKET_NAME`: R2 bucket name (optional)
+- `R2_PUBLIC_URL`: Public URL for R2 bucket (e.g., `https://screenshots.domain.com`)
+
+Set repository secrets:
+- `R2_ACCESS_KEY_ID`: R2 access key
+- `R2_SECRET_ACCESS_KEY`: R2 secret key
 
 ## Period Format
 
@@ -74,17 +81,40 @@ npm test -- --update-snapshots  # Update baselines
   "status": "failed",
   "name": "site-name",
   "url": "https://example.com",
-  "report_url": "https://github.com/org/repo/actions/runs/123"
+  "report_url": "https://github.com/org/repo/actions/runs/123",
+  "screenshot_url": "https://screenshots.domain.com/123456/site-name/diff.png"
 }
 ```
 
 **WEBHOOK_URL_ALWAYS** (all results):
 ```json
 {
-  "status": "success",  // or "failed"
+  "status": "success",
   "name": "site-name",
   "url": "https://example.com",
-  "report_url": "https://github.com/org/repo/actions/runs/123"
+  "report_url": "https://github.com/org/repo/actions/runs/123",
+  "screenshot_url": null
+}
+```
+
+**Slack Image Embedding:**
+For Slack to embed images, send to a Slack Incoming Webhook with Block Kit:
+```json
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Visual Regression Failed*\n<https://example.com|site-name>"
+      }
+    },
+    {
+      "type": "image",
+      "image_url": "https://screenshots.domain.com/123456/site-name/diff.png",
+      "alt_text": "Visual diff"
+    }
+  ]
 }
 ```
 

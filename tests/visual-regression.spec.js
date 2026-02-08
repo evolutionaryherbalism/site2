@@ -123,6 +123,13 @@ for (const site of urlsToTest) {
       return;
     }
 
+    // Save current screenshot to test-results (for R2 upload)
+    const currentScreenshotPath = path.join(testInfo.outputDir, `${site.name}-current.png`);
+    await page.screenshot({
+      path: currentScreenshotPath,
+      fullPage: true
+    });
+
     // Visual comparison using Playwright's built-in snapshot
     await expect(page).toHaveScreenshot(`${site.name}.png`, {
       fullPage: true,
