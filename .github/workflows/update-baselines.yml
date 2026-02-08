@@ -54,6 +54,27 @@ jobs:
           path: tests/visual-regression.spec.js-snapshots
           key: visual-baselines-v1
 
+      - name: Upload baselines to R2
+        if: steps.update.outcome == 'success' && vars.R2_BUCKET_NAME != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.R2_BUCKET_NAME }}
+        run: |
+          # Upload all baseline screenshots to R2 at stable paths
+          find tests/visual-regression.spec.js-snapshots -name "*.png" | while read file; do
+            filename=$(basename "$file")
+            # Extract site name (e.g., "elh-1.png" -> "elh-1")
+            sitename="${filename%.png}"
+
+            # Upload to baselines/{sitename}.png
+            s3_path="baselines/${sitename}.png"
+            aws s3 cp "$file" "s3://${BUCKET}/${s3_path}" --endpoint-url "$AWS_ENDPOINT_URL"
+
+            echo "Uploaded baseline: ${s3_path}"
+          done
+
       - name: Notify failure
         if: steps.update.outcome == 'failure' && vars.WEBHOOK_URL != ''
         env:

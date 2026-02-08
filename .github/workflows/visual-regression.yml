@@ -159,30 +159,35 @@ jobs:
 
           // Find screenshot for a test
           function findScreenshot(testName) {
-            if (!r2PublicUrl) return null;
+            if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
+
+            let screenshotUrl = null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
               const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
-                // Extract timestamp from filename
                 const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
-              }
-              const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
-              if (actualPath) {
-                const filename = path.basename(actualPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
-              }
-              const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
-              if (currentPath) {
-                const filename = path.basename(currentPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
+                screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
+              } else {
+                const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
+                if (actualPath) {
+                  const filename = path.basename(actualPath);
+                  const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                  screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
+                } else {
+                  const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
+                  if (currentPath) {
+                    const filename = path.basename(currentPath);
+                    const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                    screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
+                  }
+                }
               }
             } catch (e) {}
-            return null;
+
+            const baselineUrl = r2PublicUrl ? `${r2PublicUrl}/baselines/${testName}.png` : null;
+            return { screenshot_url: screenshotUrl, baseline_url: baselineUrl };
           }
 
           results.suites.forEach(suite => {
@@ -193,14 +198,15 @@ jobs:
                     const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                     const name = match ? match[1] : spec.title;
                     const url = sitesMap.get(name) || 'unknown';
-                    const screenshotUrl = findScreenshot(name);
+                    const { screenshot_url, baseline_url } = findScreenshot(name);
 
                     const payload = {
                       status: 'failed',
                       name: name,
                       url: url,
                       report_url: reportUrl,
-                      screenshot_url: screenshotUrl
+                      screenshot_url: screenshot_url,
+                      baseline_url: baseline_url
                     };
 
                     fetch(webhook, {
@@ -247,29 +253,35 @@ jobs:
           const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
 
           function findScreenshot(testName) {
-            if (!r2PublicUrl) return null;
+            if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
+
+            let screenshotUrl = null;
             try {
               // Priority: diff (failed) > actual (failed) > current (always exists)
               const diffPath = execSync(`find test-results -type f -name "${testName}-*-diff.png" | head -1`).toString().trim();
               if (diffPath) {
                 const filename = path.basename(diffPath);
                 const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
-              }
-              const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
-              if (actualPath) {
-                const filename = path.basename(actualPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
-              }
-              const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
-              if (currentPath) {
-                const filename = path.basename(currentPath);
-                const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
-                return `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
+                screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
+              } else {
+                const actualPath = execSync(`find test-results -type f -name "${testName}-*-actual.png" | head -1`).toString().trim();
+                if (actualPath) {
+                  const filename = path.basename(actualPath);
+                  const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                  screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
+                } else {
+                  const currentPath = execSync(`find test-results -type f -name "${testName}-*-current.png" | head -1`).toString().trim();
+                  if (currentPath) {
+                    const filename = path.basename(currentPath);
+                    const timestamp = filename.match(/-(\d+)\.png$/)?.[1] || Date.now();
+                    screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
+                  }
+                }
               }
             } catch (e) {}
-            return null;
+
+            const baselineUrl = r2PublicUrl ? `${r2PublicUrl}/baselines/${testName}.png` : null;
+            return { screenshot_url: screenshotUrl, baseline_url: baselineUrl };
           }
 
           results.suites.forEach(suite => {
@@ -279,14 +291,15 @@ jobs:
                   const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                   const name = match ? match[1] : spec.title;
                   const url = sitesMap.get(name) || 'unknown';
-                  const screenshotUrl = findScreenshot(name);
+                  const { screenshot_url, baseline_url } = findScreenshot(name);
 
                   const payload = {
                     status: result.status === 'passed' ? 'success' : 'failed',
                     name: name,
                     url: url,
                     report_url: reportUrl,
-                    screenshot_url: screenshotUrl
+                    screenshot_url: screenshot_url,
+                    baseline_url: baseline_url
                   };
 
                   fetch(webhook, {

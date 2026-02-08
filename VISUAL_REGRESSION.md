@@ -82,7 +82,8 @@ npm test -- --update-snapshots  # Update baselines
   "name": "site-name",
   "url": "https://example.com",
   "report_url": "https://github.com/org/repo/actions/runs/123",
-  "screenshot_url": "https://screenshots.domain.com/123456/site-name/diff.png"
+  "screenshot_url": "https://screenshots.domain.com/123456/site-name/site-name-diff-1738876543.png",
+  "baseline_url": "https://screenshots.domain.com/baselines/site-name.png"
 }
 ```
 
@@ -93,7 +94,8 @@ npm test -- --update-snapshots  # Update baselines
   "name": "site-name",
   "url": "https://example.com",
   "report_url": "https://github.com/org/repo/actions/runs/123",
-  "screenshot_url": null
+  "screenshot_url": "https://screenshots.domain.com/123456/site-name/site-name-1738876543.png",
+  "baseline_url": "https://screenshots.domain.com/baselines/site-name.png"
 }
 ```
 
@@ -106,13 +108,26 @@ For Slack to embed images, send to a Slack Incoming Webhook with Block Kit:
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*Visual Regression Failed*\n<https://example.com|site-name>"
+        "text": "*Visual Regression Failed*\n<https://example.com|site-name>\n<https://github.com/org/repo/actions/runs/123|View Report>"
       }
     },
     {
       "type": "image",
-      "image_url": "https://screenshots.domain.com/123456/site-name/diff.png",
-      "alt_text": "Visual diff"
+      "image_url": "https://screenshots.domain.com/baselines/site-name.png",
+      "alt_text": "Baseline",
+      "title": {
+        "type": "plain_text",
+        "text": "Baseline"
+      }
+    },
+    {
+      "type": "image",
+      "image_url": "https://screenshots.domain.com/123456/site-name/site-name-diff-1738876543.png",
+      "alt_text": "Current (with diff)",
+      "title": {
+        "type": "plain_text",
+        "text": "Current (with diff)"
+      }
     }
   ]
 }
