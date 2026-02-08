@@ -25,27 +25,49 @@ jobs:
           restore-keys: visual-baselines-
 
       - name: Check baseline exists
+        id: baseline-check
         run: |
           if [ "${{ steps.cache-baseline.outputs.cache-hit }}" != "true" ]; then
             echo "❌ No baseline cache found. Run 'Update Visual Baselines' workflow first."
-            exit 1
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
           if [ ! -d "tests/visual-regression.spec.js-snapshots" ] || [ -z "$(ls -A tests/visual-regression.spec.js-snapshots 2>/dev/null)" ]; then
             echo "❌ Baseline cache is empty. Run 'Update Visual Baselines' workflow first."
-            exit 1
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
           echo "✅ Baseline cache restored successfully"
+          echo "baseline_exists=true" >> $GITHUB_OUTPUT
+
+      - name: Notify baseline missing
+        if: steps.baseline-check.outputs.baseline_exists == 'false' && vars.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+        run: |
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"failed\",\"name\":\"baseline-check\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+
+      - name: Exit if baseline missing
+        if: steps.baseline-check.outputs.baseline_exists == 'false'
+        run: |
+          echo "::error::No baseline found. Run 'Update Visual Baselines' workflow first."
+          exit 1
 
       - name: Setup Node.js
+        if: steps.baseline-check.outputs.baseline_exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
+        if: steps.baseline-check.outputs.baseline_exists == 'true'
         run: npm ci
 
       - name: Cache Playwright browsers
+        if: steps.baseline-check.outputs.baseline_exists == 'true'
         uses: actions/cache@v4
         id: playwright-cache
         with:
@@ -53,10 +75,11 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: steps.baseline-check.outputs.baseline_exists == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
+        if: steps.baseline-check.outputs.baseline_exists == 'true'
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
         run: npm test
