@@ -97,7 +97,7 @@ jobs:
           retention-days: 30
 
       - name: Upload screenshots to R2
-        if: steps.test.outcome == 'failure' && vars.R2_BUCKET_NAME != ''
+        if: always() && vars.R2_BUCKET_NAME != ''
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -249,7 +249,7 @@ jobs:
                   const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                   const name = match ? match[1] : spec.title;
                   const url = sitesMap.get(name) || 'unknown';
-                  const screenshotUrl = result.status === 'failed' ? findScreenshot(name) : null;
+                  const screenshotUrl = findScreenshot(name);
 
                   const payload = {
                     status: result.status === 'passed' ? 'success' : 'failed',
