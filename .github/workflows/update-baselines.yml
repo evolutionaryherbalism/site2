@@ -3,6 +3,10 @@ name: Update Visual Baselines
 on:
   workflow_dispatch:
 
+concurrency:
+  group: visual-regression-baselines
+  cancel-in-progress: false
+
 permissions:
   contents: write
   actions: write
@@ -37,6 +41,10 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
       - name: Update baseline screenshots
         id: update
         env:
@@ -45,6 +53,7 @@ jobs:
         continue-on-error: true
 
       - name: Delete old baseline cache
+        if: steps.update.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,32 +74,27 @@ jobs:
           AWS_ENDPOINT_URL: https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET_NAME }}
         run: |
-          # Upload all baseline screenshots to R2 at stable paths
-          find tests/visual-regression.spec.js-snapshots -name "*.png" | while read file; do
-            filename=$(basename "$file")
-            # Extract site name (e.g., "elh-1.png" -> "elh-1")
-            sitename="${filename%.png}"
-
-            # Upload to baselines/{sitename}.png
-            s3_path="baselines/${sitename}.png"
-            aws s3 cp "$file" "s3://${BUCKET}/${s3_path}" --endpoint-url "$AWS_ENDPOINT_URL"
-
-            echo "Uploaded baseline: ${s3_path}"
-          done
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            sitename="${file%.png}"
+            sitename=$(basename "$sitename")
+            aws s3 cp "$file" "s3://${BUCKET}/baselines/${sitename}.png" --endpoint-url "$AWS_ENDPOINT_URL"
+            echo "Uploaded baseline: baselines/${sitename}.png"
+          done < <(find tests/visual-regression.spec.js-snapshots -name "*.png" 2>/dev/null)
 
       - name: Notify failure
         if: steps.update.outcome == 'failure' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST "$WEBHOOK_URL" \
+          curl -sf -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"failed\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       - name: Notify always
-        if: always() && env.WEBHOOK_URL_ALWAYS != ''
+        if: "!cancelled() && env.WEBHOOK_URL_ALWAYS != ''"
         env:
           STATUS: ${{ steps.update.outcome }}
         run: |
-          curl -X POST "$WEBHOOK_URL_ALWAYS" \
+          curl -sf -X POST "$WEBHOOK_URL_ALWAYS" \
             -H "Content-Type: application/json" \
             -d "{\"status\":\"$STATUS\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
