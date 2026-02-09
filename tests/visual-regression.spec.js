@@ -137,7 +137,7 @@ for (const site of urlsToTest) {
     // Visual comparison using Playwright's built-in snapshot
     await expect(page).toHaveScreenshot(`${site.name}.png`, {
       fullPage: true,
-			maxDiffPixelRatio: 0.05,
+      maxDiffPixelRatio: 0.05,
       threshold: 0.2,
       timeout: 10000,
     });
