@@ -76,8 +76,9 @@ jobs:
         run: |
           while IFS= read -r file; do
             [ -n "$file" ] || continue
-            sitename="${file%.png}"
-            sitename=$(basename "$sitename")
+            sitename=$(basename "$file" .png)
+            # Strip Playwright's -project-platform suffix (e.g. -chromium-linux)
+            sitename=$(echo "$sitename" | sed 's/-chromium-[a-z]*$//')
             aws s3 cp "$file" "s3://${BUCKET}/baselines/${sitename}.png" --endpoint-url "$AWS_ENDPOINT_URL"
             echo "Uploaded baseline: baselines/${sitename}.png"
           done < <(find tests/visual-regression.spec.js-snapshots -name "*.png" 2>/dev/null)

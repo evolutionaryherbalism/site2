@@ -101,13 +101,30 @@ async function sendNotifications() {
   let sent = 0;
   for (const payload of notifications) {
     try {
+      console.log(`Sending payload: ${JSON.stringify(payload)}`);
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (!response.ok) {
-        console.error(`Webhook returned ${response.status}: ${await response.text()}`);
+        const errorText = await response.text();
+        console.error(`Webhook returned ${response.status}: ${errorText}`);
+        // Retry with text-only fallback if blocks were rejected
+        if (response.status === 400 && payload.blocks) {
+          console.log('Retrying with text-only payload...');
+          const fallback = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: payload.text })
+          });
+          if (fallback.ok) {
+            sent++;
+            console.log('Text-only fallback succeeded.');
+          } else {
+            console.error(`Text-only fallback also failed: ${fallback.status}`);
+          }
+        }
       } else {
         sent++;
       }

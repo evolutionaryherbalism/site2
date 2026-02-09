@@ -203,6 +203,7 @@ jobs:
 
       - name: Send failure notification
         if: steps.test.outcome == 'failure' && env.WEBHOOK_URL != ''
+        continue-on-error: true
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
@@ -213,6 +214,7 @@ jobs:
           !cancelled()
           && (steps.test.outcome == 'success' || steps.test.outcome == 'failure')
           && env.WEBHOOK_URL_ALWAYS != ''
+        continue-on-error: true
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
