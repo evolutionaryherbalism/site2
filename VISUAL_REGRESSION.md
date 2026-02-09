@@ -64,12 +64,20 @@ Period must be multiple of 15 minutes.
 ### Local
 ```bash
 npm install
-npm test                    # Test all sites
-npm test -- --update-snapshots  # Update baselines
+npm test                           # Test all sites
+npm test -- --update-snapshots     # Update baselines
+npm run clean                      # Clear snapshots and test results
 ```
 
 ### GitHub Actions
-- **Automatic**: Every 15 minutes (schedule)
+**Via CLI:**
+```bash
+npm run test:remote                # Trigger Visual Regression Tests
+npm run update-baselines:remote    # Trigger Update Visual Baselines
+```
+
+**Via GitHub UI:**
+- **Automatic**: Every 5 minutes (schedule)
 - **Manual Test**: Actions → Visual Regression Tests → Run workflow
 - **Update Baselines**: Actions → Update Visual Baselines → Run workflow
 
@@ -99,39 +107,42 @@ npm test -- --update-snapshots  # Update baselines
 }
 ```
 
-**Slack Image Embedding:**
-For Slack to embed images, send to a Slack Incoming Webhook with Block Kit:
+**Slack Webhook Format:**
+Payloads are automatically formatted as Slack Block Kit:
 ```json
 {
+  "text": "Visual Regression Failed: site-name",
   "blocks": [
     {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*Visual Regression Failed*\n<https://example.com|site-name>\n<https://github.com/org/repo/actions/runs/123|View Report>"
+        "text": "*❌ Visual Regression Failed: site-name*\n<https://example.com|View Page> | <https://github.com/org/repo/actions/runs/123|View Report>"
       }
     },
     {
       "type": "image",
       "image_url": "https://screenshots.domain.com/baselines/site-name.png",
-      "alt_text": "Baseline",
-      "title": {
-        "type": "plain_text",
-        "text": "Baseline"
-      }
+      "alt_text": "Baseline screenshot"
+    },
+    {
+      "type": "context",
+      "elements": [{ "type": "mrkdwn", "text": "_Baseline_" }]
     },
     {
       "type": "image",
       "image_url": "https://screenshots.domain.com/123456/site-name/site-name-diff-1738876543.png",
-      "alt_text": "Current (with diff)",
-      "title": {
-        "type": "plain_text",
-        "text": "Current (with diff)"
-      }
+      "alt_text": "Current screenshot with diff"
+    },
+    {
+      "type": "context",
+      "elements": [{ "type": "mrkdwn", "text": "_Current (with diff)_" }]
     }
   ]
 }
 ```
+
+**Note:** Set `WEBHOOK_URL` and `WEBHOOK_URL_ALWAYS` to your Slack Incoming Webhook URL.
 
 ## Baseline Management
 

@@ -206,7 +206,7 @@ jobs:
                         type: "section",
                         text: {
                           type: "mrkdwn",
-                          text: `*❌ Visual Regression Failed: ${name}*\n<${url}|View Page> • <${reportUrl}|View Report>`
+                          text: `*❌ Visual Regression Failed: ${name}*\n<${url}|View Page> | <${reportUrl}|View Report>`
                         }
                       }
                     ];
@@ -215,8 +215,11 @@ jobs:
                       blocks.push({
                         type: "image",
                         image_url: baselineUrl,
-                        alt_text: "Baseline screenshot",
-                        title: { type: "plain_text", text: "Baseline" }
+                        alt_text: "Baseline screenshot"
+                      });
+                      blocks.push({
+                        type: "context",
+                        elements: [{ type: "mrkdwn", text: "_Baseline_" }]
                       });
                     }
 
@@ -224,12 +227,18 @@ jobs:
                       blocks.push({
                         type: "image",
                         image_url: screenshotUrl,
-                        alt_text: "Current screenshot with diff",
-                        title: { type: "plain_text", text: "Current (with diff)" }
+                        alt_text: "Current screenshot with diff"
+                      });
+                      blocks.push({
+                        type: "context",
+                        elements: [{ type: "mrkdwn", text: "_Current (with diff)_" }]
                       });
                     }
 
-                    const payload = { blocks };
+                    const payload = {
+                      text: `Visual Regression Failed: ${name}`,
+                      blocks: blocks
+                    };
 
                     fetch(webhook, {
                       method: 'POST',
@@ -289,12 +298,13 @@ jobs:
 
                   // Format as Slack blocks
                   const emoji = status === 'success' ? '✅' : '❌';
+                  const statusText = status === 'success' ? 'Passed' : 'Failed';
                   const blocks = [
                     {
                       type: "section",
                       text: {
                         type: "mrkdwn",
-                        text: `*${emoji} Visual Regression ${status === 'success' ? 'Passed' : 'Failed'}: ${name}*\n<${url}|View Page> • <${reportUrl}|View Report>`
+                        text: `*${emoji} Visual Regression ${statusText}: ${name}*\n<${url}|View Page> | <${reportUrl}|View Report>`
                       }
                     }
                   ];
@@ -303,22 +313,31 @@ jobs:
                     blocks.push({
                       type: "image",
                       image_url: baselineUrl,
-                      alt_text: "Baseline screenshot",
-                      title: { type: "plain_text", text: "Baseline" }
+                      alt_text: "Baseline screenshot"
+                    });
+                    blocks.push({
+                      type: "context",
+                      elements: [{ type: "mrkdwn", text: "_Baseline_" }]
                     });
                   }
 
                   if (screenshotUrl) {
-                    const imageTitle = status === 'success' ? 'Current' : 'Current (with diff)';
+                    const imageLabel = status === 'success' ? 'Current' : 'Current (with diff)';
                     blocks.push({
                       type: "image",
                       image_url: screenshotUrl,
-                      alt_text: imageTitle,
-                      title: { type: "plain_text", text: imageTitle }
+                      alt_text: imageLabel
+                    });
+                    blocks.push({
+                      type: "context",
+                      elements: [{ type: "mrkdwn", text: `_${imageLabel}_` }]
                     });
                   }
 
-                  const payload = { blocks };
+                  const payload = {
+                    text: `Visual Regression ${statusText}: ${name}`,
+                    blocks: blocks
+                  };
 
                   fetch(webhook, {
                     method: 'POST',

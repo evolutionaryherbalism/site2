@@ -4,7 +4,9 @@
   "description": "Visual regression testing for monitored URLs",
   "scripts": {
     "test": "playwright test",
-    "clean": "rm -rf tests/visual-regression.spec.js-snapshots test-results playwright-report"
+    "clean": "rm -rf tests/visual-regression.spec.js-snapshots test-results playwright-report",
+    "test:remote": "gh workflow run visual-regression.yml",
+    "update:remote": "gh workflow run update-baselines.yml"
   },
   "keywords": [],
   "author": "",
