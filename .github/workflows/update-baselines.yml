@@ -88,7 +88,7 @@ jobs:
         run: |
           curl -sf -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "{\"status\":\"failed\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+            -d "{\"text\":\"\u274c Update Baselines Failed\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*\u274c Update Baselines Failed*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Report>\"}}]}"
 
       - name: Notify always
         if: "!cancelled() && env.WEBHOOK_URL_ALWAYS != ''"
@@ -96,9 +96,10 @@ jobs:
         env:
           STATUS: ${{ steps.update.outcome }}
         run: |
+          if [ "$STATUS" = "success" ]; then EMOJI="\u2705"; else EMOJI="\u274c"; fi
           curl -sf -X POST "$WEBHOOK_URL_ALWAYS" \
             -H "Content-Type: application/json" \
-            -d "{\"status\":\"$STATUS\",\"name\":\"update-baselines\",\"url\":\"https://github.com/${{ github.repository }}\",\"report_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+            -d "{\"text\":\"Update Baselines: $STATUS\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*${EMOJI} Update Baselines: ${STATUS}*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Report>\"}}]}"
 
       - name: Fail if update failed
         if: steps.update.outcome == 'failure'
