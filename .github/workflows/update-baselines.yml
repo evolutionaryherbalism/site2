@@ -84,6 +84,7 @@ jobs:
 
       - name: Notify failure
         if: steps.update.outcome == 'failure' && env.WEBHOOK_URL != ''
+        continue-on-error: true
         run: |
           curl -sf -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
@@ -91,6 +92,7 @@ jobs:
 
       - name: Notify always
         if: "!cancelled() && env.WEBHOOK_URL_ALWAYS != ''"
+        continue-on-error: true
         env:
           STATUS: ${{ steps.update.outcome }}
         run: |

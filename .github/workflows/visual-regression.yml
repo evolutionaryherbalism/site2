@@ -103,6 +103,7 @@ jobs:
 
       - name: Notify baseline missing
         if: steps.baseline-check.outputs.baseline_exists == 'false' && env.WEBHOOK_URL != ''
+        continue-on-error: true
         run: |
           curl -sf -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
