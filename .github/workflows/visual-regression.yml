@@ -108,6 +108,7 @@ jobs:
         run: |
           # Find all screenshots (current, diff, actual)
           TIMESTAMP=$(date +%s)
+          echo "{}" > r2-paths.json
           find test-results -name "*-current.png" -o -name "*-diff.png" -o -name "*-actual.png" | while read file; do
             filename=$(basename "$file")
 
@@ -117,18 +118,45 @@ jobs:
             # Determine file type and construct new filename with timestamp
             if [[ "$filename" == *"-current.png" ]]; then
               newfilename="${sitename}-${TIMESTAMP}.png"
+              filetype="current"
             elif [[ "$filename" == *"-diff.png" ]]; then
               newfilename="${sitename}-diff-${TIMESTAMP}.png"
+              filetype="diff"
             elif [[ "$filename" == *"-actual.png" ]]; then
               newfilename="${sitename}-actual-${TIMESTAMP}.png"
+              filetype="actual"
             fi
 
             # Upload with clean path: run_id/site-name/site-name-timestamp.png
             s3_path="${RUN_ID}/${sitename}/${newfilename}"
             aws s3 cp "$file" "s3://${BUCKET}/${s3_path}" --endpoint-url "$AWS_ENDPOINT_URL"
 
-            echo "Uploaded: ${s3_path}"
+            # Store mapping: sitename.type -> full R2 URL
+            full_url="${R2_PUBLIC_URL}/${s3_path}"
+            echo "Uploaded: ${full_url}"
+
+            # Append to JSON mapping (using jq if available, else simple append)
+            if command -v jq &> /dev/null; then
+              jq --arg site "$sitename" --arg type "$filetype" --arg url "$full_url" \
+                '.[$site + "-" + $type] = $url' r2-paths.json > r2-paths-tmp.json && mv r2-paths-tmp.json r2-paths.json
+            else
+              # Fallback: write as simple key=value
+              echo "${sitename}-${filetype}=${full_url}" >> r2-paths.txt
+            fi
           done
+
+          # Also store baseline URLs
+          if [ -n "${R2_PUBLIC_URL}" ]; then
+            if command -v jq &> /dev/null; then
+              find test-results -name "*.png" -type f | while read file; do
+                filename=$(basename "$file")
+                sitename=$(echo "$filename" | sed 's/-current\.png$//' | sed 's/-diff\.png$//' | sed 's/-actual\.png$//')
+                baseline_url="${R2_PUBLIC_URL}/baselines/${sitename}.png"
+                jq --arg site "$sitename" --arg url "$baseline_url" \
+                  '.[$site + "-baseline"] = $url' r2-paths.json > r2-paths-tmp.json && mv r2-paths-tmp.json r2-paths.json
+              done
+            fi
+          fi
 
       - name: Send webhook notification on failure
         if: steps.test.outcome == 'failure' && env.WEBHOOK_URL != ''
@@ -140,53 +168,24 @@ jobs:
           cat > notify.js << 'EOF'
           const fs = require('fs');
           const yaml = require('js-yaml');
-          const path = require('path');
-          const { execSync } = require('child_process');
 
           if (!fs.existsSync('test-results/results.json')) process.exit(0);
 
           const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
           const webhook = process.env.WEBHOOK_URL;
           const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-          const r2PublicUrl = process.env.R2_PUBLIC_URL;
-          const runId = process.env.RUN_ID;
+
+          // Load R2 paths mapping
+          let r2Paths = {};
+          if (fs.existsSync('r2-paths.json')) {
+            r2Paths = JSON.parse(fs.readFileSync('r2-paths.json', 'utf8'));
+          }
 
           const config = process.env.URLS_CONFIG
             ? yaml.load(process.env.URLS_CONFIG)
             : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
 
           const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
-
-          // Find screenshot for a test
-          function findScreenshot(testName) {
-            if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
-
-            let screenshotUrl = null;
-            let timestamp = null;
-            try {
-              // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f \\( -name "${testName}-diff.png" -o -name "${testName}-*-diff.png" \\) | head -1`).toString().trim();
-              if (diffPath) {
-                timestamp = execSync('date +%s').toString().trim();
-                screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
-              } else {
-                const actualPath = execSync(`find test-results -type f \\( -name "${testName}-actual.png" -o -name "${testName}-*-actual.png" \\) | head -1`).toString().trim();
-                if (actualPath) {
-                  timestamp = execSync('date +%s').toString().trim();
-                  screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
-                } else {
-                  const currentPath = execSync(`find test-results -type f \\( -name "${testName}-current.png" -o -name "${testName}-*-current.png" \\) | head -1`).toString().trim();
-                  if (currentPath) {
-                    timestamp = execSync('date +%s').toString().trim();
-                    screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
-                  }
-                }
-              }
-            } catch (e) {}
-
-            const baselineUrl = r2PublicUrl ? `${r2PublicUrl}/baselines/${testName}.png` : null;
-            return { screenshot_url: screenshotUrl, baseline_url: baselineUrl };
-          }
 
           results.suites.forEach(suite => {
             suite.specs.forEach(spec => {
@@ -196,16 +195,41 @@ jobs:
                     const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                     const name = match ? match[1] : spec.title;
                     const url = sitesMap.get(name) || 'unknown';
-                    const { screenshot_url, baseline_url } = findScreenshot(name);
 
-                    const payload = {
-                      status: 'failed',
-                      name: name,
-                      url: url,
-                      report_url: reportUrl,
-                      screenshot_url: screenshot_url,
-                      baseline_url: baseline_url
-                    };
+                    // Get URLs from stored R2 paths
+                    const screenshotUrl = r2Paths[`${name}-diff`] || r2Paths[`${name}-actual`] || r2Paths[`${name}-current`] || null;
+                    const baselineUrl = r2Paths[`${name}-baseline`] || null;
+
+                    // Format as Slack blocks
+                    const blocks = [
+                      {
+                        type: "section",
+                        text: {
+                          type: "mrkdwn",
+                          text: `*❌ Visual Regression Failed: ${name}*\n<${url}|View Page> • <${reportUrl}|View Report>`
+                        }
+                      }
+                    ];
+
+                    if (baselineUrl) {
+                      blocks.push({
+                        type: "image",
+                        image_url: baselineUrl,
+                        alt_text: "Baseline screenshot",
+                        title: { type: "plain_text", text: "Baseline" }
+                      });
+                    }
+
+                    if (screenshotUrl) {
+                      blocks.push({
+                        type: "image",
+                        image_url: screenshotUrl,
+                        alt_text: "Current screenshot with diff",
+                        title: { type: "plain_text", text: "Current (with diff)" }
+                      });
+                    }
+
+                    const payload = { blocks };
 
                     fetch(webhook, {
                       method: 'POST',
@@ -231,53 +255,24 @@ jobs:
           cat > notify-always.js << 'EOF'
           const fs = require('fs');
           const yaml = require('js-yaml');
-          const path = require('path');
-          const { execSync } = require('child_process');
 
           if (!fs.existsSync('test-results/results.json')) process.exit(0);
 
           const results = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
           const webhook = process.env.WEBHOOK_URL_ALWAYS;
           const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-          const testStatus = process.env.TEST_STATUS;
-          const r2PublicUrl = process.env.R2_PUBLIC_URL;
-          const runId = process.env.RUN_ID;
+
+          // Load R2 paths mapping
+          let r2Paths = {};
+          if (fs.existsSync('r2-paths.json')) {
+            r2Paths = JSON.parse(fs.readFileSync('r2-paths.json', 'utf8'));
+          }
 
           const config = process.env.URLS_CONFIG
             ? yaml.load(process.env.URLS_CONFIG)
             : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
 
           const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
-
-          function findScreenshot(testName) {
-            if (!r2PublicUrl) return { screenshot_url: null, baseline_url: null };
-
-            let screenshotUrl = null;
-            let timestamp = null;
-            try {
-              // Priority: diff (failed) > actual (failed) > current (always exists)
-              const diffPath = execSync(`find test-results -type f \\( -name "${testName}-diff.png" -o -name "${testName}-*-diff.png" \\) | head -1`).toString().trim();
-              if (diffPath) {
-                timestamp = execSync('date +%s').toString().trim();
-                screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-diff-${timestamp}.png`;
-              } else {
-                const actualPath = execSync(`find test-results -type f \\( -name "${testName}-actual.png" -o -name "${testName}-*-actual.png" \\) | head -1`).toString().trim();
-                if (actualPath) {
-                  timestamp = execSync('date +%s').toString().trim();
-                  screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-actual-${timestamp}.png`;
-                } else {
-                  const currentPath = execSync(`find test-results -type f \\( -name "${testName}-current.png" -o -name "${testName}-*-current.png" \\) | head -1`).toString().trim();
-                  if (currentPath) {
-                    timestamp = execSync('date +%s').toString().trim();
-                    screenshotUrl = `${r2PublicUrl}/${runId}/${testName}/${testName}-${timestamp}.png`;
-                  }
-                }
-              }
-            } catch (e) {}
-
-            const baselineUrl = r2PublicUrl ? `${r2PublicUrl}/baselines/${testName}.png` : null;
-            return { screenshot_url: screenshotUrl, baseline_url: baselineUrl };
-          }
 
           results.suites.forEach(suite => {
             suite.specs.forEach(spec => {
@@ -286,16 +281,44 @@ jobs:
                   const match = spec.title.match(/^(.+?) \((.+?)\)$/);
                   const name = match ? match[1] : spec.title;
                   const url = sitesMap.get(name) || 'unknown';
-                  const { screenshot_url, baseline_url } = findScreenshot(name);
+                  const status = result.status === 'passed' ? 'success' : 'failed';
 
-                  const payload = {
-                    status: result.status === 'passed' ? 'success' : 'failed',
-                    name: name,
-                    url: url,
-                    report_url: reportUrl,
-                    screenshot_url: screenshot_url,
-                    baseline_url: baseline_url
-                  };
+                  // Get URLs from stored R2 paths
+                  const screenshotUrl = r2Paths[`${name}-diff`] || r2Paths[`${name}-actual`] || r2Paths[`${name}-current`] || null;
+                  const baselineUrl = r2Paths[`${name}-baseline`] || null;
+
+                  // Format as Slack blocks
+                  const emoji = status === 'success' ? '✅' : '❌';
+                  const blocks = [
+                    {
+                      type: "section",
+                      text: {
+                        type: "mrkdwn",
+                        text: `*${emoji} Visual Regression ${status === 'success' ? 'Passed' : 'Failed'}: ${name}*\n<${url}|View Page> • <${reportUrl}|View Report>`
+                      }
+                    }
+                  ];
+
+                  if (baselineUrl) {
+                    blocks.push({
+                      type: "image",
+                      image_url: baselineUrl,
+                      alt_text: "Baseline screenshot",
+                      title: { type: "plain_text", text: "Baseline" }
+                    });
+                  }
+
+                  if (screenshotUrl) {
+                    const imageTitle = status === 'success' ? 'Current' : 'Current (with diff)';
+                    blocks.push({
+                      type: "image",
+                      image_url: screenshotUrl,
+                      alt_text: imageTitle,
+                      title: { type: "plain_text", text: imageTitle }
+                    });
+                  }
+
+                  const payload = { blocks };
 
                   fetch(webhook, {
                     method: 'POST',
