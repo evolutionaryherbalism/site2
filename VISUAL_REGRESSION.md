@@ -73,42 +73,21 @@ npm run clean                      # Clear snapshots and test results
 **Via CLI:**
 ```bash
 npm run test:remote                # Trigger Visual Regression Tests
-npm run update-baselines:remote    # Trigger Update Visual Baselines
+npm run update:remote              # Trigger Update Visual Baselines
 ```
 
 **Via GitHub UI:**
-- **Automatic**: Every 5 minutes (schedule)
+- **Automatic**: Every 15 minutes (schedule)
 - **Manual Test**: Actions → Visual Regression Tests → Run workflow
 - **Update Baselines**: Actions → Update Visual Baselines → Run workflow
 
 ## Webhook Payload
 
-**WEBHOOK_URL** (failures only):
-```json
-{
-  "status": "failed",
-  "name": "site-name",
-  "url": "https://example.com",
-  "report_url": "https://github.com/org/repo/actions/runs/123",
-  "screenshot_url": "https://screenshots.domain.com/123456/site-name/site-name-diff-1738876543.png",
-  "baseline_url": "https://screenshots.domain.com/baselines/site-name.png"
-}
-```
+Notifications are sent as Slack Block Kit messages via `scripts/notify.js`:
+- **WEBHOOK_URL**: Receives failure notifications only
+- **WEBHOOK_URL_ALWAYS**: Receives all test results (pass and fail)
 
-**WEBHOOK_URL_ALWAYS** (all results):
-```json
-{
-  "status": "success",
-  "name": "site-name",
-  "url": "https://example.com",
-  "report_url": "https://github.com/org/repo/actions/runs/123",
-  "screenshot_url": "https://screenshots.domain.com/123456/site-name/site-name-1738876543.png",
-  "baseline_url": "https://screenshots.domain.com/baselines/site-name.png"
-}
-```
-
-**Slack Webhook Format:**
-Payloads are automatically formatted as Slack Block Kit:
+**Slack Block Kit format:**
 ```json
 {
   "text": "Visual Regression Failed: site-name",
@@ -142,7 +121,7 @@ Payloads are automatically formatted as Slack Block Kit:
 }
 ```
 
-**Note:** Set `WEBHOOK_URL` and `WEBHOOK_URL_ALWAYS` to your Slack Incoming Webhook URL.
+Each test result is sent as a separate message. If block delivery fails (e.g. invalid image URLs), the script retries with a text-only fallback.
 
 ## Baseline Management
 
@@ -162,8 +141,15 @@ tests/
   visual-regression.spec.js-snapshots/ # Baseline screenshots (cached, not in git)
     chromium/
       sitename.png
+scripts/
+  notify.js                           # Slack notification builder
 urls.yml                              # Local URL configuration
+playwright.config.js                  # Playwright configuration
 .github/workflows/
   visual-regression.yml               # Test workflow
   update-baselines.yml                # Baseline update workflow
 ```
+
+## Future Features
+
+- **HTML comparison report**: Generate a styled HTML page with side-by-side baseline vs. current screenshots in a grid/thumbnail layout, upload to R2, and link from Slack notifications. This would provide richer visual comparison than Slack's Block Kit allows.
