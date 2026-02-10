@@ -22,7 +22,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check schedule
+        id: schedule-check
+        env:
+          URLS_CONFIG: ${{ vars.URLS_CONFIG }}
+        run: node scripts/check-schedule.js
+
       - name: Restore baseline snapshots
+        if: steps.schedule-check.outputs.has_tests == 'true'
         id: cache-baseline
         uses: actions/cache/restore@v4
         with:
@@ -31,6 +47,7 @@ jobs:
           restore-keys: visual-baselines-
 
       - name: Validate baselines exist
+        if: steps.schedule-check.outputs.has_tests == 'true'
         id: baseline-check
         run: |
           if [ "${{ steps.cache-baseline.outputs.cache-hit }}" != "true" ] || \
@@ -42,7 +59,7 @@ jobs:
           fi
 
       - name: Notify baseline missing
-        if: steps.baseline-check.outputs.baseline_exists == 'false' && env.WEBHOOK_URL != ''
+        if: steps.schedule-check.outputs.has_tests == 'true' && steps.baseline-check.outputs.baseline_exists == 'false' && env.WEBHOOK_URL != ''
         continue-on-error: true
         run: |
           curl -sf -X POST "$WEBHOOK_URL" \
@@ -50,21 +67,13 @@ jobs:
             -d "{\"text\":\"\u26A0\uFE0F No baseline snapshots found.\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*\u26A0\uFE0F Visual Regression: No Baselines Found*\nRun the <https://github.com/${{ github.repository }}/actions/workflows/update-baselines.yml|Update Visual Baselines> workflow first.\"}}]}"
 
       - name: Exit if baseline missing
-        if: steps.baseline-check.outputs.baseline_exists == 'false'
+        if: steps.schedule-check.outputs.has_tests == 'true' && steps.baseline-check.outputs.baseline_exists == 'false'
         run: |
           echo "::error::No baseline found. Run 'Update Visual Baselines' workflow first."
           exit 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Cache Playwright browsers
+        if: steps.schedule-check.outputs.has_tests == 'true'
         uses: actions/cache@v4
         id: playwright-cache
         with:
@@ -72,10 +81,11 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: steps.schedule-check.outputs.has_tests == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
+        if: steps.schedule-check.outputs.has_tests == 'true'
         id: test
         continue-on-error: true
         env:
@@ -83,7 +93,7 @@ jobs:
         run: npm test
 
       - name: Upload test artifacts
-        if: failure() || steps.test.outcome == 'failure'
+        if: steps.schedule-check.outputs.has_tests == 'true' && (failure() || steps.test.outcome == 'failure')
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
@@ -93,7 +103,7 @@ jobs:
           retention-days: 30
 
       - name: Upload screenshots to R2
-        if: always() && vars.R2_BUCKET_NAME != ''
+        if: steps.schedule-check.outputs.has_tests == 'true' && !cancelled() && vars.R2_BUCKET_NAME != ''
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -138,7 +148,7 @@ jobs:
           fi
 
       - name: Send failure notification
-        if: steps.test.outcome == 'failure' && env.WEBHOOK_URL != ''
+        if: steps.schedule-check.outputs.has_tests == 'true' && steps.test.outcome == 'failure' && env.WEBHOOK_URL != ''
         continue-on-error: true
         env:
           URLS_CONFIG: ${{ vars.URLS_CONFIG }}
@@ -147,7 +157,8 @@ jobs:
 
       - name: Send always notification
         if: |
-          !cancelled()
+          steps.schedule-check.outputs.has_tests == 'true'
+          && !cancelled()
           && (steps.test.outcome == 'success' || steps.test.outcome == 'failure')
           && env.WEBHOOK_URL_ALWAYS != ''
         continue-on-error: true
@@ -157,5 +168,5 @@ jobs:
         run: node scripts/notify.js --mode always
 
       - name: Fail job if tests failed
-        if: steps.test.outcome == 'failure'
+        if: steps.schedule-check.outputs.has_tests == 'true' && steps.test.outcome == 'failure'
         run: exit 1
