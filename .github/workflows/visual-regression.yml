@@ -13,67 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  check-schedule:
-    runs-on: ubuntu-latest
-    outputs:
-      sites_due: ${{ steps.check.outputs.sites_due }}
-    steps:
-      - name: Checkout config only
-        if: github.event_name != 'workflow_dispatch'
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: urls.yml
-
-      - name: Check if any sites are scheduled now
-        id: check
-        env:
-          URLS_CONFIG: ${{ vars.URLS_CONFIG }}
-        run: |
-          # Manual runs always proceed
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual run — testing all sites."
-            echo "sites_due=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Extract period values from config
-          if [ -n "$URLS_CONFIG" ]; then
-            PERIODS=$(echo "$URLS_CONFIG" | grep -oP 'period:\s*\K[0-9]+[mhd]')
-          else
-            PERIODS=$(grep -oP 'period:\s*\K[0-9]+[mhd]' urls.yml 2>/dev/null)
-          fi
-
-          if [ -z "$PERIODS" ]; then
-            echo "No periods found in config."
-            echo "sites_due=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          MINUTES_SINCE_EPOCH=$(( $(date +%s) / 60 ))
-
-          for period in $PERIODS; do
-            value=${period%[mhd]}
-            unit=${period: -1}
-            case $unit in
-              m) mins=$value ;;
-              h) mins=$((value * 60)) ;;
-              d) mins=$((value * 1440)) ;;
-            esac
-
-            remainder=$((MINUTES_SINCE_EPOCH % mins))
-            if [ "$remainder" -lt 15 ]; then
-              echo "Site with period ${period} is due (remainder=${remainder})."
-              echo "sites_due=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          done
-
-          echo "No sites due at this time."
-          echo "sites_due=false" >> "$GITHUB_OUTPUT"
-
   test:
-    needs: check-schedule
-    if: needs.check-schedule.outputs.sites_due == 'true'
     runs-on: ubuntu-latest
     env:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
@@ -143,7 +83,7 @@ jobs:
         run: npm test
 
       - name: Upload test artifacts
-        if: always()
+        if: failure() || steps.test.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
