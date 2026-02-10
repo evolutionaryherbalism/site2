@@ -143,6 +143,7 @@ tests/
       sitename.png
 scripts/
   notify.js                           # Slack notification builder
+  check-schedule.js                   # Pre-flight schedule check (sets has_tests output)
 urls.yml                              # Local URL configuration
 playwright.config.js                  # Playwright configuration
 .github/workflows/
@@ -153,3 +154,4 @@ playwright.config.js                  # Playwright configuration
 ## Future Features
 
 - **HTML comparison report**: Generate a styled HTML page with side-by-side baseline vs. current screenshots in a grid/thumbnail layout, upload to R2, and link from Slack notifications. This would provide richer visual comparison than Slack's Block Kit allows.
+- **Configurable cron schedule**: Allow the cron timing string (`*/15 * * * *`) to be overridden via a repository variable (e.g. `CRON_SCHEDULE`) rather than hardcoded in the workflow. Would require a separate "scheduler" workflow or a workaround, since GitHub Actions does not support expressions in `schedule.cron` fields — one option is a caller workflow that reads the variable and triggers the test workflow via `workflow_dispatch` on the desired cadence.
