@@ -53,8 +53,7 @@ for (const suite of (results.suites || [])) {
     const emoji = passed ? '\u2705' : '\u274C';
     const statusText = passed ? 'Passed' : 'Failed';
 
-    const screenshotUrl = r2Paths[`${name}-diff`]
-      || r2Paths[`${name}-actual`]
+    const screenshotUrl = r2Paths[`${name}-actual`]
       || r2Paths[`${name}-current`]
       || null;
     const baselineUrl = r2Paths[`${name}-baseline`] || null;
@@ -77,7 +76,7 @@ for (const suite of (results.suites || [])) {
     }
 
     if (screenshotUrl) {
-      const imageLabel = passed ? 'Current' : 'Current (with diff)';
+      const imageLabel = 'Current';
       blocks.push(
         { type: 'image', image_url: screenshotUrl, alt_text: imageLabel },
         { type: 'context', elements: [{ type: 'mrkdwn', text: `_${imageLabel}_` }] }
