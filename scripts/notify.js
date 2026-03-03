@@ -5,12 +5,20 @@ const yaml = require('js-yaml');
 const modeIndex = process.argv.indexOf('--mode');
 const mode = modeIndex !== -1 ? process.argv[modeIndex + 1] : 'always';
 
-const isBaselineMode = mode === 'baseline' || mode === 'baseline-failure';
+const MODES = {
+  failure: { webhookEnv: 'WEBHOOK_URL', useResults: true, failuresOnly: true, allowFallback: true },
+  always: { webhookEnv: 'WEBHOOK_URL_ALWAYS', useResults: true, failuresOnly: false, allowFallback: true },
+  baseline: { webhookEnv: 'WEBHOOK_URL_ALWAYS', useResults: false, failuresOnly: false, allowFallback: false },
+  'baseline-failure': { webhookEnv: 'WEBHOOK_URL', useResults: false, failuresOnly: false, allowFallback: false }
+};
 
-const webhookUrl = mode === 'failure' || mode === 'baseline-failure'
-  ? process.env.WEBHOOK_URL
-  : process.env.WEBHOOK_URL_ALWAYS;
+const modeConfig = MODES[mode];
+if (!modeConfig) {
+  console.log(`Unknown mode: ${mode}. Available modes: ${Object.keys(MODES).join(', ')}`);
+  process.exit(1);
+}
 
+const webhookUrl = process.env[modeConfig.webhookEnv];
 if (!webhookUrl) {
   console.log(`No webhook URL configured for mode: ${mode}`);
   process.exit(0);
@@ -23,8 +31,7 @@ let r2Paths = {};
 if (fs.existsSync('r2-paths.json')) {
   r2Paths = JSON.parse(fs.readFileSync('r2-paths.json', 'utf8'));
 }
-
-if (isBaselineMode) {
+function buildBaselineNotifications() {
   const status = process.env.STATUS || 'unknown';
   const emoji = status === 'success' ? '\u2705' : '\u274C';
   const blocks = [
@@ -52,59 +59,77 @@ if (isBaselineMode) {
     if (total > 20) {
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `showing 20/${total} baseline screenshots` }]
+        elements: [{ type: 'mrkdwn', text: `showing ${total}/20 baseline screenshots` }]
       });
     }
   }
 
-  const notifications = [
-    {
-      text: `Update Baselines: ${status}`,
-      blocks
-    }
-  ];
+  return [{ text: `Update Baselines: ${status}`, blocks }];
+}
 
-  async function sendBaselineNotifications() {
-    let sent = 0;
-    for (const payload of notifications) {
-      try {
-        console.log(`Sending payload: ${JSON.stringify(payload)}`);
-        const response = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Webhook returned ${response.status}: ${errorText}`);
-        } else {
-          sent++;
-        }
-      } catch (err) {
-        console.error(`Webhook failed for "${payload.text}":`, err.message);
-      }
-    }
-    console.log(`Sent ${sent}/${notifications.length} notification(s) in ${mode} mode.`);
+function loadResults() {
+  const resultsPath = 'test-results/results.json';
+  if (!fs.existsSync(resultsPath)) {
+    console.log('No test results found, skipping notification.');
+    process.exit(0);
   }
+  return JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+}
 
-  sendBaselineNotifications();
+function loadSitesConfig() {
+  const config = process.env.URLS_CONFIG
+    ? yaml.load(process.env.URLS_CONFIG)
+    : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
+  return new Map(config.sites.map(s => [s.name, s.url]));
+}
+
+async function sendNotifications(notifications, { allowFallback }) {
+  let sent = 0;
+  for (const payload of notifications) {
+    try {
+      console.log(`Sending payload: ${JSON.stringify(payload)}`);
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Webhook returned ${response.status}: ${errorText}`);
+        if (allowFallback && response.status === 400 && payload.blocks) {
+          console.log('Retrying with text-only payload...');
+          const fallback = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: payload.text })
+          });
+          if (fallback.ok) {
+            sent++;
+            console.log('Text-only fallback succeeded.');
+          } else {
+            console.error(`Text-only fallback also failed: ${fallback.status}`);
+          }
+        }
+      } else {
+        sent++;
+      }
+    } catch (err) {
+      console.error(`Webhook failed for "${payload.text}":`, err.message);
+    }
+  }
+  console.log(`Sent ${sent}/${notifications.length} notification(s) in ${mode} mode.`);
+}
+
+if (!modeConfig.useResults) {
+  const notifications = buildBaselineNotifications();
+  sendNotifications(notifications, { allowFallback: false });
   return;
 }
 
-const resultsPath = 'test-results/results.json';
-if (!fs.existsSync(resultsPath)) {
-  console.log('No test results found, skipping notification.');
-  process.exit(0);
-}
-
-const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+const results = loadResults();
 
 // Load site config for URL lookup
-const config = process.env.URLS_CONFIG
-  ? yaml.load(process.env.URLS_CONFIG)
-  : yaml.load(fs.readFileSync('urls.yml', 'utf8'));
-
-const sitesMap = new Map(config.sites.map(s => [s.name, s.url]));
+const sitesMap = loadSitesConfig();
 
 // Build notification payloads from test results
 const notifications = [];
@@ -114,7 +139,7 @@ for (const suite of (results.suites || [])) {
     const passed = spec.ok;
 
     // In failure mode, skip passed tests
-    if (mode === 'failure' && passed) continue;
+    if (modeConfig.failuresOnly && passed) continue;
 
     const match = spec.title.match(/^(.+?) \((.+?)\)$/);
     const name = match ? match[1] : spec.title;
@@ -165,43 +190,4 @@ if (notifications.length === 0) {
   process.exit(0);
 }
 
-// Send notifications sequentially with proper await
-async function sendNotifications() {
-  let sent = 0;
-  for (const payload of notifications) {
-    try {
-      console.log(`Sending payload: ${JSON.stringify(payload)}`);
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Webhook returned ${response.status}: ${errorText}`);
-        // Retry with text-only fallback if blocks were rejected
-        if (response.status === 400 && payload.blocks) {
-          console.log('Retrying with text-only payload...');
-          const fallback = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: payload.text })
-          });
-          if (fallback.ok) {
-            sent++;
-            console.log('Text-only fallback succeeded.');
-          } else {
-            console.error(`Text-only fallback also failed: ${fallback.status}`);
-          }
-        }
-      } else {
-        sent++;
-      }
-    } catch (err) {
-      console.error(`Webhook failed for "${payload.text}":`, err.message);
-    }
-  }
-  console.log(`Sent ${sent}/${notifications.length} notification(s) in ${mode} mode.`);
-}
-
-sendNotifications();
+sendNotifications(notifications, { allowFallback: modeConfig.allowFallback });
