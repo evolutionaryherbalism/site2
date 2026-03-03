@@ -1,17 +1,94 @@
 const fs = require('fs');
 const yaml = require('js-yaml');
 
-// Parse --mode argument: "failure" (only failed tests) or "always" (all tests)
+// Parse --mode argument: "failure" (only failed tests), "always" (all tests), or "baseline" (baseline update)
 const modeIndex = process.argv.indexOf('--mode');
 const mode = modeIndex !== -1 ? process.argv[modeIndex + 1] : 'always';
 
-const webhookUrl = mode === 'failure'
+const isBaselineMode = mode === 'baseline' || mode === 'baseline-failure';
+
+const webhookUrl = mode === 'failure' || mode === 'baseline-failure'
   ? process.env.WEBHOOK_URL
   : process.env.WEBHOOK_URL_ALWAYS;
 
 if (!webhookUrl) {
   console.log(`No webhook URL configured for mode: ${mode}`);
   process.exit(0);
+}
+
+const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+// Load R2 paths mapping (written by the R2 upload step)
+let r2Paths = {};
+if (fs.existsSync('r2-paths.json')) {
+  r2Paths = JSON.parse(fs.readFileSync('r2-paths.json', 'utf8'));
+}
+
+if (isBaselineMode) {
+  const status = process.env.STATUS || 'unknown';
+  const emoji = status === 'success' ? '\u2705' : '\u274C';
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${emoji} Update Baselines: ${status}*\n<${reportUrl}|View Report>`
+      }
+    }
+  ];
+
+  if (status === 'success') {
+    const baselineEntries = Object.entries(r2Paths)
+      .filter(([key, value]) => key.startsWith('baseline:') && value)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    const total = baselineEntries.length;
+    const shown = baselineEntries.slice(0, 20);
+
+    for (const [, url] of shown) {
+      blocks.push({ type: 'image', image_url: url, alt_text: 'Baseline screenshot' });
+    }
+
+    if (total > 20) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `showing 20/${total} baseline screenshots` }]
+      });
+    }
+  }
+
+  const notifications = [
+    {
+      text: `Update Baselines: ${status}`,
+      blocks
+    }
+  ];
+
+  async function sendBaselineNotifications() {
+    let sent = 0;
+    for (const payload of notifications) {
+      try {
+        console.log(`Sending payload: ${JSON.stringify(payload)}`);
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Webhook returned ${response.status}: ${errorText}`);
+        } else {
+          sent++;
+        }
+      } catch (err) {
+        console.error(`Webhook failed for "${payload.text}":`, err.message);
+      }
+    }
+    console.log(`Sent ${sent}/${notifications.length} notification(s) in ${mode} mode.`);
+  }
+
+  sendBaselineNotifications();
+  return;
 }
 
 const resultsPath = 'test-results/results.json';
@@ -21,13 +98,6 @@ if (!fs.existsSync(resultsPath)) {
 }
 
 const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-const reportUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-
-// Load R2 paths mapping (written by the R2 upload step)
-let r2Paths = {};
-if (fs.existsSync('r2-paths.json')) {
-  r2Paths = JSON.parse(fs.readFileSync('r2-paths.json', 'utf8'));
-}
 
 // Load site config for URL lookup
 const config = process.env.URLS_CONFIG
