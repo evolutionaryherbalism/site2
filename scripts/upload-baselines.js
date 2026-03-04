@@ -38,22 +38,31 @@ if (pngFiles.length === 0) {
 }
 
 const r2Paths = {};
+const uniqueSuffix = process.env.RUN_ID || `${Date.now()}`;
 
 for (const file of pngFiles) {
   const baseName = path.basename(file, '.png');
   const sitename = baseName.replace(/-chromium-[a-z]*$/, '');
-  const s3Path = `baselines/${sitename}.png`;
+  const stablePath = `baselines/${sitename}.png`;
+  const uniquePath = `baselines/${sitename}-${uniqueSuffix}.png`;
 
   execFileSync(
     'aws',
-    ['s3', 'cp', file, `s3://${bucket}/${s3Path}`, '--endpoint-url', endpoint],
+    ['s3', 'cp', file, `s3://${bucket}/${stablePath}`, '--endpoint-url', endpoint],
     { stdio: 'inherit', env: process.env }
   );
 
-  console.log(`Uploaded baseline: ${s3Path}`);
+  execFileSync(
+    'aws',
+    ['s3', 'cp', file, `s3://${bucket}/${uniquePath}`, '--endpoint-url', endpoint],
+    { stdio: 'inherit', env: process.env }
+  );
+
+  console.log(`Uploaded baseline: ${stablePath}`);
+  console.log(`Uploaded baseline (unique): ${uniquePath}`);
 
   if (publicUrl) {
-    r2Paths[`baseline:${sitename}`] = `${publicUrl}/${s3Path}`;
+    r2Paths[`baseline:${sitename}`] = `${publicUrl}/${uniquePath}`;
   }
 }
 
