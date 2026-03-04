@@ -59,7 +59,7 @@ function buildBaselineNotifications() {
     if (total > 20) {
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `showing ${total}/20 baseline screenshots` }]
+        elements: [{ type: 'mrkdwn', text: `showing ${shown.length}/${total} baseline screenshots` }]
       });
     }
   }
