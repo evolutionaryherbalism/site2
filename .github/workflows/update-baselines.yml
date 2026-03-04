@@ -76,34 +76,22 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_ENDPOINT_URL: https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET_NAME }}
-        run: |
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            sitename=$(basename "$file" .png)
-            # Strip Playwright's -project-platform suffix (e.g. -chromium-linux)
-            sitename=$(echo "$sitename" | sed 's/-chromium-[a-z]*$//')
-            aws s3 cp "$file" "s3://${BUCKET}/baselines/${sitename}.png" --endpoint-url "$AWS_ENDPOINT_URL"
-            echo "Uploaded baseline: baselines/${sitename}.png"
-          done < <(find tests/visual-regression.spec.js-snapshots -name "*.png" 2>/dev/null)
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: node scripts/upload-baselines.js
 
       - name: Notify failure
         if: steps.update.outcome == 'failure' && env.WEBHOOK_URL != ''
         continue-on-error: true
-        run: |
-          curl -sf -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"text\":\"\u274c Update Baselines Failed\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*\u274c Update Baselines Failed*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Report>\"}}]}"
+        env:
+          STATUS: ${{ steps.update.outcome }}
+        run: node scripts/notify.js --mode baseline-failure
 
       - name: Notify always
         if: "!cancelled() && env.WEBHOOK_URL_ALWAYS != ''"
         continue-on-error: true
         env:
           STATUS: ${{ steps.update.outcome }}
-        run: |
-          if [ "$STATUS" = "success" ]; then EMOJI="\u2705"; else EMOJI="\u274c"; fi
-          curl -sf -X POST "$WEBHOOK_URL_ALWAYS" \
-            -H "Content-Type: application/json" \
-            -d "{\"text\":\"Update Baselines: $STATUS\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*${EMOJI} Update Baselines: ${STATUS}*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Report>\"}}]}"
+        run: node scripts/notify.js --mode baseline
 
       - name: Fail if update failed
         if: steps.update.outcome == 'failure'
