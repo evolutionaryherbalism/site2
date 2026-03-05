@@ -165,7 +165,7 @@ for (const suite of (results.suites || [])) {
 
     const statusText = passed
       ? 'Passed'
-      : (pixelInfo ? `Failed (${pixelInfo.count.toLocaleString()} pixels, ${pixelInfo.percentage}% changed)` : 'Failed');
+      : (pixelInfo ? `Failed (${pixelInfo.count.toLocaleString('en-US')} pixels, ${pixelInfo.percentage}% changed)` : 'Failed');
 
     const screenshotUrl = r2Paths[`${name}-actual`]
       || r2Paths[`${name}-current`]
