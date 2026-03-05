@@ -146,7 +146,26 @@ for (const suite of (results.suites || [])) {
     const url = sitesMap.get(name) || 'unknown';
 
     const emoji = passed ? '\u2705' : '\u274C';
-    const statusText = passed ? 'Passed' : 'Failed';
+
+    // For failed tests, extract pixel diff info from the error message
+    let pixelInfo = null;
+    if (!passed) {
+      for (const testResult of (spec.tests || [])) {
+        for (const result of (testResult.results || [])) {
+          const errorMessage = result.error?.message || '';
+          const pixelMatch = errorMessage.match(/(\d+) pixels? \((\d*\.?\d+)%\)/);
+          if (pixelMatch) {
+            pixelInfo = { count: parseInt(pixelMatch[1], 10), percentage: parseFloat(pixelMatch[2]) };
+            break;
+          }
+        }
+        if (pixelInfo) break;
+      }
+    }
+
+    const statusText = passed
+      ? 'Passed'
+      : (pixelInfo ? `Failed (${pixelInfo.count.toLocaleString('en-US')} pixels, ${pixelInfo.percentage}% changed)` : 'Failed');
 
     const screenshotUrl = r2Paths[`${name}-actual`]
       || r2Paths[`${name}-current`]
