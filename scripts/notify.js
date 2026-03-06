@@ -153,9 +153,9 @@ for (const suite of (results.suites || [])) {
       for (const testResult of (spec.tests || [])) {
         for (const result of (testResult.results || [])) {
           const errorMessage = result.error?.message || '';
-          const pixelMatch = errorMessage.match(/(\d+) pixels? \((\d*\.?\d+)%\)/);
+          const pixelMatch = errorMessage.match(/(\d+) pixels? \(ratio ([\d.]+) of all image pixels\)/);
           if (pixelMatch) {
-            pixelInfo = { count: parseInt(pixelMatch[1], 10), percentage: parseFloat(pixelMatch[2]) };
+            pixelInfo = { count: parseInt(pixelMatch[1], 10), percentage: parseFloat((parseFloat(pixelMatch[2]) * 100).toFixed(2)) };
             break;
           }
         }
