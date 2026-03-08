@@ -133,6 +133,7 @@ const sitesMap = loadSitesConfig();
 
 // Build notification payloads from test results
 const notifications = [];
+const stripAnsi = str => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
 
 for (const suite of (results.suites || [])) {
   for (const spec of (suite.specs || [])) {
@@ -152,10 +153,16 @@ for (const suite of (results.suites || [])) {
     if (!passed) {
       for (const testResult of (spec.tests || [])) {
         for (const result of (testResult.results || [])) {
-          const errorMessage = result.error?.message || '';
-          const pixelMatch = errorMessage.match(/(\d+) pixels? \(ratio ([\d.]+) of all image pixels\)/);
+          const errorText = stripAnsi(result.error?.message || result.error?.stack || '');
+          const pixelMatch = errorText.match(/(\d+) pixels? \(ratio ([\d.]+) of all image pixels\)/);
           if (pixelMatch) {
-            pixelInfo = { count: parseInt(pixelMatch[1], 10), percentage: parseFloat((parseFloat(pixelMatch[2]) * 100).toFixed(2)) };
+            const count = parseInt(pixelMatch[1], 10);
+            const ratio = parseFloat(pixelMatch[2]);
+            if (ratio > 0 && ratio <= 1) {
+              const percentage = parseFloat((ratio * 100).toFixed(2));
+              const total = Math.round(count / ratio);
+              pixelInfo = { count, percentage, total };
+            }
             break;
           }
         }
@@ -163,21 +170,21 @@ for (const suite of (results.suites || [])) {
       }
     }
 
-    const statusText = passed
-      ? 'Passed'
-      : (pixelInfo ? `Failed (${pixelInfo.count.toLocaleString('en-US')} pixels, ${pixelInfo.percentage}% changed)` : 'Failed');
-
     const screenshotUrl = r2Paths[`${name}-actual`]
       || r2Paths[`${name}-current`]
       || null;
     const baselineUrl = r2Paths[`${name}-baseline`] || null;
+
+    const pixelLine = !passed && pixelInfo
+      ? `\n ${pixelInfo.percentage}% changed: ${pixelInfo.count.toLocaleString('en-US')}/${pixelInfo.total.toLocaleString('en-US')} pixels`
+      : '';
 
     const blocks = [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*${emoji} Visual Regression ${statusText}: ${name}*\n<${url}|View Page> | <${reportUrl}|View Report>`
+          text: `*${emoji} Visual Regression ${passed ? 'Passed' : 'Failed'}: ${name}*${pixelLine}\n<${url}|View Page> | <${reportUrl}|View Report>`
         }
       }
     ];
@@ -197,8 +204,12 @@ for (const suite of (results.suites || [])) {
       );
     }
 
+    const notificationText = passed
+      ? `Visual Regression Passed: ${name}`
+      : `Visual Regression Failed: ${name}${pixelLine}`;
+
     notifications.push({
-      text: `Visual Regression ${statusText}: ${name}`,
+      text: notificationText,
       blocks
     });
   }

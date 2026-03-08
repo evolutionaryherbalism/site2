@@ -90,13 +90,13 @@ Notifications are sent as Slack Block Kit messages via `scripts/notify.js`:
 **Slack Block Kit format:**
 ```json
 {
-  "text": "Visual Regression Failed (150,000 pixels, 15% changed): site-name",
+  "text": "Visual Regression Failed: site-name\n 15% changed: 150,000/1,000,000 pixels",
   "blocks": [
     {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*❌ Visual Regression Failed (150,000 pixels, 15% changed): site-name*\n<https://example.com|View Page> | <https://github.com/org/repo/actions/runs/123|View Report>"
+        "text": "*❌ Visual Regression Failed: site-name*\n 15% changed: 150,000/1,000,000 pixels\n<https://example.com|View Page> | <https://github.com/org/repo/actions/runs/123|View Report>"
       }
     },
     {
