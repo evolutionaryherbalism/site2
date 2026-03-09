@@ -162,8 +162,8 @@ for (const suite of (results.suites || [])) {
               const percentage = parseFloat((ratio * 100).toFixed(2));
               const total = Math.round(count / ratio);
               pixelInfo = { count, percentage, total };
+              break;
             }
-            break;
           }
         }
         if (pixelInfo) break;
